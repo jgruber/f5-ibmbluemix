@@ -11,14 +11,14 @@ IBM Cloud offers the ability to order Virtual Hosts with various options and uti
 
 The proceedure for creating a TMOS Virtual Edition breaks into two stages:
 
-###Steps Performed Once Per Each TMOS Virtual Edition Image Version
+### Steps Performed Once Per Each TMOS Virtual Edition Image Version
 
 1. Obtain the TMOS Virtual Edition VHD Disk Images
 2. Create Object Storage for the TMOS Disk Images
 3. Upload TMOS Disk Images into Object Storage
 3. Create a Disk Image from Object Storage
 
-###Steps Perfomred When Launching Each TMOS Virutal Edition
+### Steps Perfomred When Launching Each TMOS Virutal Edition
 
 1. Download and Customize Your cloud-init User Data File
 2. Creating a TMOS Virtual Edition Virtual Machine
@@ -114,7 +114,7 @@ What this effectively means is that your Virtual Host for all but LTM_1SLOT imag
 
 The proceedure for creating a TMOS Virtual Edition for Bare Metal installation is as follows:
 
-###Steps Perfomred When Launching Each TMOS Virutal Edition
+### Steps Perfomred When Launching Each TMOS Virutal Edition
 
 1. Order the appropriate CentOS 7.x minimal Bare Metal host
 2. Download your TMOS Virtual Edition QCOW disk image to your Bare Metal host
