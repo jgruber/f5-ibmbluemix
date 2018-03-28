@@ -107,7 +107,7 @@ ALL_1SLOT | 60GB
 
 What this effectively means is that your Virtual Host for all but LTM_1SLOT images must use a CLI or API client to create the Virtual Host with the appropriate disk size.
 
-
+[[ TO DO DOCUMENT VS CREATE WITH 100G DISK]]
 
 # Launching TMOS Virtual Edition on a IBM Cloud Bare Metal Host
 
