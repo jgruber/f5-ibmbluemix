@@ -18,7 +18,7 @@ The proceedure for creating a TMOS Virtual Edition breaks into two stages:
 3. Upload TMOS Disk Images into Object Storage
 3. Create a Disk Image from Object Storage
 
-### Steps Perfomred When Launching Each TMOS Virutal Edition
+### Steps Performed When Launching Each TMOS Virutal Edition
 
 1. Download and Customize Your cloud-init User Data File
 2. Creating a TMOS Virtual Edition Virtual Machine
