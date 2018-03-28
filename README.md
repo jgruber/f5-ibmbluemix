@@ -86,7 +86,7 @@ sed -i -e "s/__TMOS_ADMIN_PASSWORD__/softlayer/g" ibm_init_userdata.txt
 sed -i -e "s/__TMOS_ROOT_PASSWORD__/softlayer/g" ibm_init_userdata.txt
 ```
 
-It is of note that the TMM Self-IPs are provisioned to `allow-all` services initialiatlly. This can be altered when other services and settings are provisioned in later stage orchestration. F5 supports later stage orchestration through the use of our [f5-ansible](https://github.com/F5Networks/f5-ansible) modules and [TMOS REST APIs](https://devcentral.f5.com/wiki/iControlREST.HomePage.ashx).
+It is of note that the TMM Self-IPs are provisioned to `allow-all` services initially. The security of these interfaces can be tightened when additional services and settings are provisioned in later stage orchestration. F5 supports later stage orchestration through the use of our [f5-ansible](https://github.com/F5Networks/f5-ansible) modules and [TMOS REST APIs](https://devcentral.f5.com/wiki/iControlREST.HomePage.ashx).
 
 In addition, because there are multiple license activation options, TMOS license orchestration has also been deferred to later stage orchestration. F5 provides various license orchestration methods through both our [f5-cloud-libs](https://github.com/F5Networks/f5-cloud-libs) libraries and our [BIG-IQ APIs](https://devcentral.f5.com/wiki/BIGIQ.HowToSamples_license_member_management.ashx).
 
