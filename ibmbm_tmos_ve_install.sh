@@ -1,7 +1,13 @@
 #!/bin/bash
 
+#### Settings ####
+
+# TMOS Virtual edition well known account settings
+
 TMOS_ADMIN_PASSWORD="ibmsoftlayer"
 TMOS_ROOT_PASSWORD="ibmsoftlayer"
+
+# Github repo and branch for KVM environment and user_data templates
 
 REPO="jgruber"
 BRANCH="master"
@@ -9,6 +15,8 @@ BRANCH="master"
 BIGIP_UNZIPPED_QCOW_IMAGE_URL="file:///tmp/BIGIP-13.1.0.3.0.0.5.LTM_1SLOT.qcow2"
 TMOS_VE_DOMAIN_TEMPLATE="https://raw.githubusercontent.com/$REPO/f5-ibmbluemix/$BRANCH/ve_domain_xml.tmpl"
 USER_DATA_URL="https://raw.githubusercontent.com/$REPO/f5-ibmbluemix/$BRANCH/ibm_init_userdata.txt"
+
+#### End Settings ####
 
 function install_hypervisor() {
     yum -y install qemu-kvm libvirt virt-install bridge-utils iptables-services genisoimage
