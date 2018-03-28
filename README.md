@@ -69,9 +69,9 @@ It is recommended that you use F5 Virtual Edition disk image naming convention w
 
 ## Downloading and Customizing the cloud-init User Data File
 
-F5 TMOS Networking utilizes the high-performance Traffic Management Microkernel (TMM) rather then standand server networking components. The IBM Cloud Virtual Host provisioning process is designed to create standard Linux and Windows based network configurations where as TMOS provisions TMM interfaces, VLANs, and Self-IPs. In order to accept the network configuration provided to a IBM Cloud Virtual Host and provision the appropriate TMM objects, a cloud-init onboarding process is utilized. Cloud-init is the industry standard for cloud serer onboarding and is supported in TMOS. 
+F5 TMOS Networking utilizes the high-performance Traffic Management Microkernel (TMM) rather then standand server networking components. The IBM Cloud Virtual Host provisioning process is designed to create standard Linux and Windows based network configurations where as TMOS provisions TMM interfaces, VLANs, and Self-IPs. In order to accept the network configuration provided by the IBM Cloud Virtual Host provision system and transform that information into the appropriate TMM objects, a cloud-init onboarding process is utilized. Cloud-init is the industry standard for cloud serer onboarding and is supported in TMOS v13.1+.
 
-This repository contains the required cloud-init user_data file required to provision the IBM Cloud `Private and Public`, and `Private Only` networking models on TMOS Virtual Edition.
+This repository contains the cloud-init user_data file required to provision the IBM Cloud `Private and Public`, and `Private Only` networking models on TMOS Virtual Editions.
 
 To obtain the user_data file for your TMOS Virtual Edition instance, download the [ibm_init_userdata.txt](https://raw.githubusercontent.com/jgruber/f5-ibmbluemix/master/ibm_init_userdata.txt) file from this repository.
 
