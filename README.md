@@ -3,7 +3,7 @@ cloud-init based onboarding of TMOS Virtual Edition for IBM Cloud instances.
 
 These instuctions are for the base onboarding of TMOS Virtual Edition in the IBM Cloud environemnt. Once TMOS devices are created in the cloud environment, both [f5-cloud-libs](https://github.com/F5Networks/f5-cloud-libs) and [f5-ansible](https://github.com/F5Networks/f5-ansible) libraries can be used to perform additional provisioning automation.
 
-TMOS Virtual Editions can be launched as with Virtual Hosts for performance under 1Gbps, and as instances running on Bare Metal hosts for instances at or in excess of 1Gbps. The process for onboarding TMOS Virtual Edition into IBM Cloud are detailed below.
+TMOS Virtual Editions can be launched with Virtual Hosts for performance under 1Gbps, and as instances running on Bare Metal hosts for performance in excess of 1Gbps. The process for onboarding TMOS Virtual Edition into IBM Cloud are detailed below.
 
 # Launching TMOS Virtual Edition as a IBM Cloud Virtual Host
 
@@ -29,7 +29,7 @@ F5 TMOS Virtual Edition disk images can be obtained from [https://downloads.f5.c
 
 **These cloud-init based templates are only intended for TMOS Virtual Edition version 13.1 or higher. The required cloud-init functionality is not available before TMOS Virtual Edition version 13.1. Do not attempt to use these templates with TMOS Virtual Editions prior to the 13.1 release.**
 
-To determine which TMOS Virtual Edition you will need to properly support the F5 functionality and performance, the following guides have been prepared:
+To determine which TMOS Virtual Edition you will need to properly support the F5 functionality and performance desired, the following guides have been prepared:
 
 [Overview of BIG-IP VE image sizes](https://support.f5.com/csp/article/K14946)
 [Overview of BIG-IP VE license and throughput limits](https://support.f5.com/csp/article/K14810)
@@ -37,36 +37,35 @@ To determine which TMOS Virtual Edition you will need to properly support the F5
 
 Due to limitations with the virtualized networking, only TMOS Virtual Editions rated at or below 1Gbps throughput are supported as IBM Cloud Virtual Hosts. For performance rates greater than 1Gps, Bare Metal instances with the high-performance KVM virtual machine manager can be utilized.
 
-IBM Cloud requires the use of the VHD disk image format for their Virtual Hosts. Please assure that you have downloaded the correct VHD TMOS Virtual Edition disk image and have validated the downloaded disk image.
+IBM Cloud requires the use of the VHD disk image format for their Virtual Hosts. Please assure that you have downloaded the correct VHD TMOS Virtual Edition disk images.
 
-IBM Cloud Virtual Hosts require the use of the VHD disk image format. To create a TMOS Virtual Editional instance as an IBM Cloud Virtual Host, you will be downloading the vhd disks labeled as `BIGIP-[version].[TMOS Edition].vhd.zip`. As an example for the LTM 1SLOT TMOS edition of TMOS version 13.1.0.3.0.0.5, you would download the `BIGIP-13.1.0.3.0.0.5.LTM_1SLOT.vhd.zip`.
+To create a TMOS Virtual Editional instance as an IBM Cloud Virtual Host, you will be downloading the vhd disks labeled as `BIGIP-[version].[TMOS Edition].vhd.zip`. As an example for the LTM 1SLOT TMOS edition of TMOS version 13.1.0.3.0.0.5, you would download the `BIGIP-13.1.0.3.0.0.5.LTM_1SLOT.vhd.zip`.
 
 The md5 hash for each TMOS Virtual edition zip archive is available and it is highly recommended that the hash be validated to assure the local download has completed successfully.
 
-Once you have downloaded your TMOS Virtual Edition VHD disk image, you will need to uncompress it. The download is maintained as a standard zip file archive and can be uncompressed with standard unzip utilities. *You will be uploading the VHD image file, not the downloaded zip archive.* It is the uncompressed VHD disk image that will be uploaded into the IBM Cloud.
-
+Once you have downloaded your TMOS Virtual Edition VHD disk image zip archive file, you will need to uncompress it. The download is maintained as a standard zip file archive and can be uncompressed with standard unzip utilities. *You will be uploading the uncompressed VHD image file, not the downloaded zip archive.*
 
 ## Creating Object Storage for the TMOS Disk Images
 
-In order to make your TMOS Virtual Edition disk image available as a disk image for an IBM Cloud Virtual Host, you must first make your TMOS Virtual Edition disk image available to the IBM Cloud internal image import system. This is done by creating a IBM Cloud Swift Object Storage container and uploading your TMOS Virtual Edition disk image  into the container. Documentation for using IBM Cloud Swift object storage can be found at the following links:
+In order to make your TMOS Virtual Edition disk image available for use with an IBM Cloud Virtual Host, you must first make your TMOS Virtual Edition disk image available to the IBM Cloud internal image import system. This is done by creating a IBM Cloud Swift Object Storage container and uploading your TMOS Virtual Edition disk image  into the container. Documentation for using IBM Cloud Swift object storage can be found at the following links:
 
 [IBM Cloud Storage - Object Storage](https://console.bluemix.net/docs/infrastructure/objectstorage-swift/index.html#getting-started-with-object-storage-openstack-swift)
 [How do I access object storage by the command line?](http://knowledgelayer.softlayer.com/es/procedure/how-do-i-access-object-storage-command-line)
 
 ## Uploading TMOS Disk Images to Object Storage
 
-The IBM Cloud web portal does not support the uploading of storage objects which are larger then 20M bytes. In order to upload your image, you will need to use one of the upload clients documented by IBM. Here are a few options:
+The IBM Cloud web portal does not support the uploading of storage objects which are larger then 20M bytes. In order to upload your TMOS Virtual Edition VHD disk image, you will need to use one of the upload clients documented by IBM. Here are a few options:
 
 [Connecting to Object Storage OpenStack Swift using Cyberduck](https://console.bluemix.net/docs/infrastructure/objectstorage-swift/connect-object-storage-using-cyberduck.html#connecting-to-object-storage-openstack-swift-using-cyberduck)
 [Softlayer Github Repository - Bash and Python examples](https://softlayer.github.io/python/swiftUploader/)
 
 ## Creating a Disk Image from Object Storage
 
-Once the TMOS Virtual Edition disk image is uploaded into object storage, the Virtual Host image system can import and image from the object storage system. These images can then be used to launch multiple TMOS Virtual Edition instances as Virtual Hosts. This step can be completed the IBM Cloud web portal, CLI tools, or through the Soft Layer API.
+Once the TMOS Virtual Edition VHD disk image is uploaded into object storage, the Virtual Host image system can import it. Imported images can then be used to launch multiple TMOS Virtual Edition instances as Virtual Hosts. This step can be completed through the IBM Cloud web portal, CLI tools, or through the Soft Layer API.
 
 [Importing an Image](https://console.bluemix.net/docs/infrastructure/image-templates/import-image.html#importing-an-image)
 
-It is recommended that you use F5 Virtual Edition disk image naming convention when creating your images. As an example for the `BIGIP-13.1.0.3.0.0.5.LTM_1SLOT.vhd` image, the recommended Image name would be `BIGIP-13.1.0.3.0.0.5.LTM_1SLOT`. Following this suggestion will allow for future TMOS Virtual Edition images to be imported without confusion.
+It is recommended that you use F5 Virtual Edition disk image naming convention when creating your images in the Object Storage service. As an example for the `BIGIP-13.1.0.3.0.0.5.LTM_1SLOT.vhd` image, the recommended Image name would be `BIGIP-13.1.0.3.0.0.5.LTM_1SLOT`. Following this suggestion will allow for future TMOS Virtual Edition images to be imported without confusion to naming collisions.
 
 ## Downloading and Customizing the cloud-init User Data File
 
