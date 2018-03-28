@@ -1,0 +1,131 @@
+#cloud-config
+bootcmd:
+  - /usr/bin/setdb dhclient.mgmt disable && echo '*** disabled dhclient'
+  - /usr/bin/setdb provision.1nic forced_enable && echo '*** enabled 1nic'
+
+write_files:
+  - path: /config/ibmbluemix_vsi_init.sh
+    permissions: 0755
+    content: |
+        #!/bin/bash
+        function check_mcpd_up() {
+            checks=0
+            while [ $checks -lt 120 ]; do echo -n "checking mcpd..."
+                if tmsh -a show sys mcp-state field-fmt | grep -q running; then
+                    echo ready
+                    break
+                fi
+                echo not ready
+                let checks=checks+1
+                sleep 10
+            done
+        }
+        function setup_init() {
+            check_mcpd_up
+        }
+        function setup_passwords() {
+            /usr/bin/passwd admin __TMOS_ADMIN_PASSWORD__ >/dev/null 2>&1
+            /usr/bin/passwd root __TMOS_ROOT_PASSWORD__ >/dev/null 2>&1
+        }
+        function setup_1_nic_config() {
+            tmsh modify sys db provision.1nic value forced_enable
+            tmsh modify sys global-settings mgmt-dhcp disabled
+        }
+        function mount_config_drive() {
+            configDriveSrc=$(blkid -t LABEL="config-2" -odevice)
+            if [[ ! -z $configDriveSrc ]]
+            then
+                mounted=$(cat /proc/mounts | grep $configDriveSrc | wc -l)
+                if [[ $mounted == 0 ]]
+                then 
+                    configDriveDest="/mnt/config"
+                    mkdir -p $configDriveDest
+                    mount "$configDriveSrc" $configDriveDest;
+                fi
+            fi
+        }
+        function import_ssh_keys() {
+            mount_config_drive
+            /usr/bin/python - << EOF
+        import sys, json
+        meta_data=json.load(open('/mnt/config/openstack/latest/meta_data.json'))
+        for key in meta_data['public_keys']:
+            with open('/root/.ssh/authorized_keys', 'a') as ak:
+                ak.write(meta_data['public_keys'][key] + '\n')
+        EOF
+        }
+        function setup_networking() {
+            mount_config_drive
+            /usr/bin/python - << EOF
+        import sys, json, subprocess  
+        network_data=json.load(open('/mnt/config/openstack/latest/network_data.json'))
+        with open('/config/network_setup.sh','w') as ns:
+            ns.write("#!/bin/bash\n")
+            ns.write("tmsh create net vlan internal interfaces replace-all-with { 1.0 }\n")
+            ns.write("tmsh create net self self_1nic address %s/%s vlan internal allow-service all\n" % (network_data['networks'][0]['ip_address'], network_data['networks'][0]['netmask']))
+            route_index = 0
+            for route in network_data['networks'][0]['routes']:
+                route_index += 1
+                if route['network'] == '0.0.0.0':
+                    ns.write("tmsh create sys management-route default gateway %s\n" % route['gateway'])
+                else:
+                    ns.write("tmsh create net route private_%s network %s/%s gw %s\n" % (route_index, route['network'], route['netmask'], route['gateway']))
+            if len(network_data['networks']) > 1:
+                ns.write("tmsh create net vlan external interfaces replace-all-with { 1.1 }\n")
+                ns.write("tmsh create net self external address %s/%s vlan external allow-service all\n" % (network_data['networks'][1]['ip_address'], network_data['networks'][1]['netmask']))
+                route_index = 0
+                for route in network_data['networks'][1]['routes']:
+                    route_index += 1
+                    if route['network'] == '0.0.0.0':
+                        ns.write("tmsh create net route default gw %s\n" % route['gateway'])
+                    else:            
+                        ns.write("tmsh create net route public_%s network %s/%s gw %s\n" % (route_index, route['network'], route['netmask'], route['gateway']))
+            dns_servers = []
+            for service in network_data['services']:
+                if service['type'] == 'dns':
+                    dns_servers.append(service['address'])
+            if dns_servers:
+                dns_server_string = " ".join(dns_servers)
+                ns.write("tmsh modify sys dns name-servers replace-all-with { %s }\n" % dns_server_string)
+        EOF
+            chmod +x /config/network_setup.sh
+            /config/network_setup.sh
+        }
+        function setup_cleanup() {
+            umount /mnt/config >/dev/null 2>&1
+            tmsh save sys config
+            bigstart restart
+            check_mcpd_up
+        }
+        function main() {
+            echo -n "initialization started at: "; date
+            SECONDS=0
+            echo "checking system is ready"
+            setup_init
+            duration=$SECONDS
+            echo "$(($duration / 60)) minutes and $(($duration % 60)) seconds elapsed."
+            echo "changing well known account passwords"
+            setup_passwords
+            duration=$SECONDS
+            echo "$(($duration / 60)) minutes and $(($duration % 60)) seconds elapsed."
+            echo "forcing single NIC configuration"
+            setup_1_nic_config
+            duration=$SECONDS
+            echo "$(($duration / 60)) minutes and $(($duration % 60)) seconds elapsed."
+            echo "importing SSH keys"
+            import_ssh_keys
+            duration=$SECONDS
+            echo "$(($duration / 60)) minutes and $(($duration % 60)) seconds elapsed."
+            echo "provisioning networking from cloud-init network metadata"
+            setup_networking
+            duration=$SECONDS
+            echo "$(($duration / 60)) minutes and $(($duration % 60)) seconds elapsed."
+            echo "saving system configuration and restarting services"
+            setup_cleanup
+            duration=$SECONDS
+            echo "$(($duration / 60)) minutes and $(($duration % 60)) seconds elapsed."
+            echo -n "initialization complete at: "; date
+        }
+        main
+
+runcmd: [nohup sh -c '/config/ibmbluemix_vsi_init.sh' >> /var/log/ibm-tmos-init.log &]
