@@ -13,7 +13,7 @@ REPO="jgruber"
 BRANCH="master"
 
 BIGIP_UNZIPPED_QCOW_IMAGE_URL="file:///tmp/BIGIP-13.1.0.3.0.0.5.qcow2"
-TMOS_VE_DOMAIN_TEMPLATE="https://raw.githubusercontent.com/$REPO/f5-ibmbluemix/$BRANCH/ve_domain_xml.tmpl"
+TMOS_VE_DOMAIN_TEMPLATE="https://raw.githubusercontent.com/$REPO/f5-ibmbluemix/$BRANCH/ve_domain_standard_xml.tmpl"
 USER_DATA_URL="https://raw.githubusercontent.com/$REPO/f5-ibmbluemix/$BRANCH/ibm_init_userdata.txt"
 
 #### End Settings ####
@@ -93,20 +93,9 @@ function create_meta_data_json() {
 }
 
 function create_network_json() {
-    public_interface=$(get_public_interface);
-    public_mac_address=$(cat /sys/class/net/$public_interface/address)
-    public_mtu=$(cat /sys/class/net/$public_interface/mtu)
-    public_ip_address=$(cat /etc/sysconfig/network-scripts/ifcfg-$public_interface|grep IPADDR|cut -d= -f2)
-    public_netmask=$(cat /etc/sysconfig/network-scripts/ifcfg-$public_interface|grep NETMASK|cut -d= -f2)
-    public_default_gateway=$(cat /etc/sysconfig/network-scripts/ifcfg-$public_interface|grep GATEWAY|cut -d= -f2)
-    public_routes=""
-    if [ -f /etc/sysconfig/network-scripts/route-$public_interface ]; then
-        while read route; do
-            network=$(echo $route|cut -d' ' -f1)
-            gateway=$(echo $route|cut -d' ' -f3)
-            public_routes="${public_routes} ${network}:${gateway}"
-        done <<< "$(cat /etc/sysconfig/network-scripts/route-"$public_interface")"
-    fi
+
+    private_only=0;
+
     private_interface=$(get_private_interface);
     private_mtu=$(cat /sys/class/net/$private_interface/mtu)
     private_mac_address=$(cat /sys/class/net/$private_interface/address)
@@ -121,6 +110,24 @@ function create_network_json() {
             private_routes="${private_routes} ${network}:${gateway}"
         done <<< "$(cat /etc/sysconfig/network-scripts/route-"$private_interface")"
     fi
+
+    public_interface=$(get_public_interface);    
+    if [ $private_interface != $public_interface ]; then
+        public_mac_address=$(cat /sys/class/net/$public_interface/address)
+        public_mtu=$(cat /sys/class/net/$public_interface/mtu)
+        public_ip_address=$(cat /etc/sysconfig/network-scripts/ifcfg-$public_interface|grep IPADDR|cut -d= -f2)
+        public_netmask=$(cat /etc/sysconfig/network-scripts/ifcfg-$public_interface|grep NETMASK|cut -d= -f2)
+        public_default_gateway=$(cat /etc/sysconfig/network-scripts/ifcfg-$public_interface|grep GATEWAY|cut -d= -f2)
+        public_routes=""
+        if [ -f /etc/sysconfig/network-scripts/route-$public_interface ]; then
+            while read route; do
+                network=$(echo $route|cut -d' ' -f1)
+                gateway=$(echo $route|cut -d' ' -f3)
+                public_routes="${public_routes} ${network}:${gateway}"
+            done <<< "$(cat /etc/sysconfig/network-scripts/route-"$public_interface")"
+        fi
+    fi
+
     dnsservers=""
     if [ -f /etc/resolv.conf ]; then
         while read resolv; do
@@ -133,8 +140,10 @@ function create_network_json() {
     #start links
     echo -n "\"links\": [ "
     echo -n "{ \"id\": \"private_link\", \"name\": \"${private_interface}\", \"mtu\": \"${private_mtu}\", \"type\": \"phy\", \"ethernet_mac_address\": \"${private_mac_address}\"}"
-    echo -n ", "
-    echo -n "{ \"id\": \"public_link\", \"name\": \"${public_interface}\", \"mtu\": \"${public_mtu}\", \"type\": \"phy\", \"ethernet_mac_address\": \"${public_mac_address}\"}"
+    if [ $private_interface != $public_interface ]; then
+        echo -n ", "
+        echo -n "{ \"id\": \"public_link\", \"name\": \"${public_interface}\", \"mtu\": \"${public_mtu}\", \"type\": \"phy\", \"ethernet_mac_address\": \"${public_mac_address}\"}"
+    fi
     echo -n "], "
     #end links
     #start networks 
@@ -159,28 +168,31 @@ function create_network_json() {
             echo -n "${private_route_json::-1} "
         fi
     fi
-    echo -n "] }, "
-    echo -n "{ \"id\": \"public\", \"link\": \"public_link\", \"type\": \"ipv4\", \"ip_address\": \"${public_ip_address}\", \"netmask\": \"${public_netmask}\", "
-    echo -n "\"routes\": ["
-    public_route_json=""
-    if [[ ! -z "${public_default_gateway}" ]]; then
-        public_route_json=" { \"network\": \"0.0.0.0\", \"netmask\": \"0.0.0.0\", \"gateway\": \"${public_default_gateway}\" },"
+    echo -n "] }"
+    if [ $private_interface != $public_interface ]; then
+        echo -n ", "
+        echo -n "{ \"id\": \"public\", \"link\": \"public_link\", \"type\": \"ipv4\", \"ip_address\": \"${public_ip_address}\", \"netmask\": \"${public_netmask}\", "
+        echo -n "\"routes\": ["
+        public_route_json=""
+        if [[ ! -z "${public_default_gateway}" ]]; then
+            public_route_json=" { \"network\": \"0.0.0.0\", \"netmask\": \"0.0.0.0\", \"gateway\": \"${public_default_gateway}\" },"
+        fi
+        if [[ ! -z "${public_routes// }" ]]; then
+            public_routes=($public_routes)
+            for route in "${public_routes[@]}"; do
+                cidr=$(echo $route|cut -d':' -f1)
+                gateway=$(echo $route|cut -d':' -f2)
+                network=$(echo $cidr|cut -d'/' -f1)
+                maskbits=$(echo $cidr|cut -d'/' -f2)
+                netmask=$(cidr2mask $maskbits)
+                public_route_json="${public_route_json} { \"network\": \"${network}\", \"netmask\": \"${netmask}\", \"gateway\": \"${gateway}\" }," 
+            done
+        fi
+        if [[ ! -z "${public_route_json}" ]]; then
+            echo -n "${public_route_json::-1} "
+        fi
+        echo -n "] }"
     fi
-    if [[ ! -z "${public_routes// }" ]]; then
-        public_routes=($public_routes)
-        for route in "${public_routes[@]}"; do
-            cidr=$(echo $route|cut -d':' -f1)
-            gateway=$(echo $route|cut -d':' -f2)
-            network=$(echo $cidr|cut -d'/' -f1)
-            maskbits=$(echo $cidr|cut -d'/' -f2)
-            netmask=$(cidr2mask $maskbits)
-            public_route_json="${public_route_json} { \"network\": \"${network}\", \"netmask\": \"${netmask}\", \"gateway\": \"${gateway}\" }," 
-        done
-    fi
-    if [[ ! -z "${public_route_json}" ]]; then
-        echo -n "${public_route_json::-1} "
-    fi
-    echo -n "] } "
     echo -n "], "
     #end networks
     #start services
