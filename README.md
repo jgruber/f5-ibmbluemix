@@ -154,7 +154,7 @@ Once you have downloaded the zip file archive from [https://downloads.f5.com](ht
 
 To obtain the TMOS Virtual Edition installation script file, download the [ibmbm_tmos_ve_install.sh](https://raw.githubusercontent.com/jgruber/f5-ibmbluemix/master/baremetal/ibmbm_tmos_ve_install.sh) file from this repository.
 
-``# wget https://raw.githubusercontent.com/jgruber/f5-ibmbluemix/master/ibmbm_tmos_ve_install.sh``
+``# wget https://raw.githubusercontent.com/jgruber/f5-ibmbluemix/master/baremetal/ibmbm_tmos_ve_install.sh``
 
 ``# vi ibmbm_tmos_ve_install.sh``
 
