@@ -113,7 +113,7 @@ What this effectively means is that your Virtual Host for all but LTM_1SLOT imag
 
 The proceedure for creating a TMOS Virtual Edition for Bare Metal installation is as follows:
 
-### Steps Perfomred When Launching Each TMOS Virutal Edition
+### Steps Performed When Launching Each TMOS Virutal Edition
 
 1. Order the appropriate CentOS 7.x minimal Bare Metal host
 2. Download your TMOS Virtual Edition QCOW disk image to your Bare Metal host
