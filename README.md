@@ -98,12 +98,12 @@ The IBM Cloud web portal will try to limit the size of the Virtual Host initial 
 
 and summarized in the table below for TMOS version 13.1
 
-Image Type    |  Disk Size Required | IBM Cloud Disk Size
---- | --- | ---
-LTM_1SLOT | 9GB | 25G
-LTM | 40GB | 100G
-ALL | 82GB | 100G
-ALL_1SLOT | 60GB | 100G
+Image Type    |  Downloaded Disk Size | Running Disk Size Required | IBM Cloud Disk Size
+--- | --- | --- | ---
+LTM_1SLOT | 5.1 GB | 9 GB | 25 GB
+LTM | 5.1 GB | 40 GB | 100 GB
+ALL | 6.2 GB |82 GB | 100 GB
+ALL_1SLOT | 6.2 GB |60 GB | 100 GB
 
 What this effectively means is that your Virtual Host for all but LTM_1SLOT images must use a CLI or API client to create the Virtual Host with the appropriate disk size.
 
