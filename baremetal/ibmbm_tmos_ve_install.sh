@@ -219,7 +219,7 @@ function create_network_json() {
 
 function generate_private_bridge() {
     cat > /etc/sysconfig/network-scripts/ifcfg-private <<EOF
-DEVICE=br0
+DEVICE=private
 TYPE=Bridge
 BOOTPROTO=static
 ONBOOT=yes
