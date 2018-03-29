@@ -31,17 +31,23 @@ function get_config_drive_template() {
     mkdir -p /tmp/config_drive/openstack/latest
     create_meta_data_json > /tmp/config_drive/openstack/latest/meta_data.json
     create_network_json > /tmp/config_drive/openstack/latest/network_data.json
-    wget -nc -O /tmp/config_drive/openstack/latest/user_data $USER_DATA_URL
+    if ! [ -f /tmp/config_drive/openstack/latest/user_data ]; then
+        curl -o /tmp/config_drive/openstack/latest/user_data $USER_DATA_URL
+    fi
     sed -i -e "s/__TMOS_ADMIN_PASSWORD__/$TMOS_ADMIN_PASSWORD/g" /tmp/config_drive/openstack/latest/user_data
     sed -i -e "s/__TMOS_ROOT_PASSWORD__/$TMOS_ROOT_PASSWORD/g" /tmp/config_drive/openstack/latest/user_data
 }
 
 function get_ve_domain_template() {
-    wget -nc -O /tmp/ve_domain_xml.tmpl $TMOS_VE_DOMAIN_TEMPLATE
+    if ! [ -f /tmp/ve_domain_xml.tmpl ]; then
+        curl -o /tmp/ve_domain_xml.tmpl $TMOS_VE_DOMAIN_TEMPLATE
+    fi
 }
 
 function get_ve_image() {
-    wget -nc -O /var/lib/libvirt/images/bigipve.qcow2 $BIGIP_UNZIPPED_QCOW_IMAGE_URL
+    if ! [ -f /var/lib/libvirt/images/bigipve.qcow2 ]; then
+        curl -o /var/lib/libvirt/images/bigipve.qcow2 $BIGIP_UNZIPPED_QCOW_IMAGE_URL
+    fi
 }
 
 function get_public_interface() {
@@ -252,13 +258,16 @@ EOF
 }
 
 function migrate_public_interface_to_bridge() {
+    private_interface=$(get_private_interface);
     public_interface=$(get_public_interface)
-    cp /etc/sysconfig/network-scripts/ifcfg-$public_interface /etc/sysconfig/network-scripts/dist-ifcfg-$public_interface
-    sed -i '/IPADDR/d' /etc/sysconfig/network-scripts/ifcfg-$public_interface
-    sed -i '/NETMASK/d' /etc/sysconfig/network-scripts/ifcfg-$public_interface
-    sed -i '/GATEWAY/d' /etc/sysconfig/network-scripts/ifcfg-$public_interface
-    echo 'BRIDGE=public' >> /etc/sysconfig/network-scripts/ifcfg-$public_interface
-    mv /etc/sysconfig/network-scripts/route-$public_interface /etc/sysconfig/network-scripts/dist-route-$public_interface 
+    if [ $private_interface != $public_interface ]; then
+        cp /etc/sysconfig/network-scripts/ifcfg-$public_interface /etc/sysconfig/network-scripts/dist-ifcfg-$public_interface
+        sed -i '/IPADDR/d' /etc/sysconfig/network-scripts/ifcfg-$public_interface
+        sed -i '/NETMASK/d' /etc/sysconfig/network-scripts/ifcfg-$public_interface
+        sed -i '/GATEWAY/d' /etc/sysconfig/network-scripts/ifcfg-$public_interface
+        echo 'BRIDGE=public' >> /etc/sysconfig/network-scripts/ifcfg-$public_interface
+        mv /etc/sysconfig/network-scripts/route-$public_interface /etc/sysconfig/network-scripts/dist-route-$public_interface
+    fi
 }
 
 function create_config_drive() {
