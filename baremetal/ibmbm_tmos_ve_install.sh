@@ -13,7 +13,7 @@ REPO="jgruber"
 BRANCH="master"
 
 BIGIP_UNZIPPED_QCOW_IMAGE_URL="file:///tmp/BIGIP-13.1.0.3.0.0.5.qcow2"
-TMOS_VE_DOMAIN_TEMPLATE="https://raw.githubusercontent.com/$REPO/f5-ibmbluemix/$BRANCH/ve_domain_standard_xml.tmpl"
+TMOS_VE_DOMAIN_TEMPLATE="https://raw.githubusercontent.com/$REPO/f5-ibmbluemix/$BRANCH/baremetal/ve_domain_standard_xml.tmpl"
 USER_DATA_URL="https://raw.githubusercontent.com/$REPO/f5-ibmbluemix/$BRANCH/ibm_init_userdata.txt"
 
 #### End Settings ####
