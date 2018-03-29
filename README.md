@@ -113,6 +113,8 @@ What this effectively means is that your Virtual Host for all but LTM_1SLOT imag
 
 [[ TO DO DOCUMENT VS CREATE WITH 100G DISK]]
 
+Once the TMOS Virtual Edition is launched and has completed intialization, it will display like any other Virtual Host in the IBM Cloud web portal, CLI, or API. To access the TMOS Virtual Edition simply `ssh` as root to the Virtual host's private IP address or login to the TMOS Web Inteface at `https://[private_ip_address]:8443`.
+
 # Launching TMOS Virtual Edition on a IBM Cloud Bare Metal Host
 
 The proceedure for creating a TMOS Virtual Edition for Bare Metal installation is as follows:
@@ -190,6 +192,8 @@ Execute the TMOS Virtual Edition installation script.
 ``# bash ibmbm_tmos_ve_install.sh``
 
 The Bare Metal host will reboot after installation and the network addresses previously allocated to the Bare Metal host by the IBM Cloud provisioning process will now owned by the TMOS Virtual Edition running on the host. The only access to the Bare Metal host operating system will be through the remote console for the Bare Metal host. The Bare Metal host is simply functioning as a compute host for the TMOS Virtual Edition.
+
+To access the TMOS Virtual Edition simply `ssh` as root to the Bare Metal host's private IP address or login to the TMOS Web Inteface at `https://[private_ip_address]:8443`.
 
 If at any point in this process you experience difficulty, simply reload the OS for the Bare Metal device and start over.
 
