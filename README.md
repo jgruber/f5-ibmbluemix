@@ -32,7 +32,9 @@ F5 TMOS Virtual Edition disk images can be obtained from [https://downloads.f5.c
 To determine which TMOS Virtual Edition you will need to properly support the F5 functionality and performance desired, the following guides have been prepared:
 
 [Overview of BIG-IP VE image sizes](https://support.f5.com/csp/article/K14946)
+
 [Overview of BIG-IP VE license and throughput limits](https://support.f5.com/csp/article/K14810)
+
 [Environmental setup for evaluating performance on the BIG-IP Virtual Edition system](https://support.f5.com/csp/article/K17160)
 
 Due to limitations with the virtualized networking, only TMOS Virtual Editions rated at or below 1Gbps throughput are supported as IBM Cloud Virtual Hosts. For performance rates greater than 1Gps, Bare Metal instances with the high-performance KVM virtual machine manager can be utilized.
@@ -50,6 +52,7 @@ Once you have downloaded your TMOS Virtual Edition VHD disk image zip archive fi
 In order to make your TMOS Virtual Edition disk image available for use with an IBM Cloud Virtual Host, you must first make your TMOS Virtual Edition disk image available to the IBM Cloud internal image import system. This is done by creating a IBM Cloud Swift Object Storage container and uploading your TMOS Virtual Edition disk image  into the container. Documentation for using IBM Cloud Swift object storage can be found at the following links:
 
 [IBM Cloud Storage - Object Storage](https://console.bluemix.net/docs/infrastructure/objectstorage-swift/index.html#getting-started-with-object-storage-openstack-swift)
+
 [How do I access object storage by the command line?](http://knowledgelayer.softlayer.com/es/procedure/how-do-i-access-object-storage-command-line)
 
 ## Uploading TMOS Disk Images to Object Storage
@@ -57,6 +60,7 @@ In order to make your TMOS Virtual Edition disk image available for use with an 
 The IBM Cloud web portal does not support the uploading of storage objects which are larger then 20M bytes. In order to upload your TMOS Virtual Edition VHD disk image, you will need to use one of the upload clients documented by IBM. Here are a few options:
 
 [Connecting to Object Storage OpenStack Swift using Cyberduck](https://console.bluemix.net/docs/infrastructure/objectstorage-swift/connect-object-storage-using-cyberduck.html#connecting-to-object-storage-openstack-swift-using-cyberduck)
+
 [Softlayer Github Repository - Bash and Python examples](https://softlayer.github.io/python/swiftUploader/)
 
 ## Creating a Disk Image from Object Storage
