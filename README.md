@@ -122,9 +122,10 @@ The proceedure for creating a TMOS Virtual Edition for Bare Metal installation i
 
 ## Ordering a Bare Metal Server
 
-The TMOS Virtual Edition install script assume the software packaging tools and packages associated with Red Hat Linux version 7. The installation script was tested with the IBM Cloud Bare Metal CentOS 7.x minimal OS install image.
+The TMOS Virtual Edition install script assume the software packaging tools and packages associated with Red Hat Linux version 7 are available to your Bare Metal host. The installation script was tested with the IBM Cloud Bare Metal CentOS 7.x minimal OS install image.
 
-It is assumed that the Bare Metal host has public network access in order to download the necessary packages for the high-performance KVM virtual machine manageer environment. In addition, the host must have access to the URLs specified in the installation script to download the TMOS Virtual Edition qcow2 disk image, KVM environment template, and the user_data file template. These files can be installed locally and referenced by `file://` URLs.
+Bare Metal hosts with `Private and Public` or ` Private Only` networking models have access to download the necessary packages for the high-performance KVM virtual machine manager environment. In addition to the softare install packages, the host must have access to the URLs specified in the installation script to download the TMOS Virtual Edition qcow2 disk image, KVM environment template, and the user_data file template. For `Private Only` networking, these resources can either be hosted on private reachable URLs or can be securely copied to the Bare Metal host and referenced by `file://` URLs.
+
 
 ## Obtaining TMOS Virtual Edition QCOW Disk Images
 
@@ -143,28 +144,15 @@ The KVM domain enviroment to launch your TMOS Virtual Edition has been templated
 
 The md5 hash for each TMOS Virtual edition zip archive is available and it is highly recommended that the hash be validated to assure the local download has completed successfully.
 
-Once you have downloaded your TMOS Virtual Edition qcow2 disk image, you will need to uncompress it. The download is maintained as a standard zip file archive and can be uncompressed with standard unzip utilities. *You will be uploading the qcow2 image file, not the downloaded zip archive.* It is the qcow2 disk image from within the zip archive that will be downloading onto your Bare Metal host by the installation script.
+Once you have downloaded your TMOS Virtual Edition qcow2 disk image, you will need to uncompress it. The download is maintained as a standard zip file archive and can be uncompressed with standard unzip utilities. *The installation script will need access to the qcow2 image file, not the downloaded zip archive.* It is the qcow2 disk image from within the zip archive that will be installed on your Bare Metal host.
 
 ## Downloading the TMOS Virtual Edition QCOW Disk Image to Your Host
 
-Once you have downloaded the zip file archive from [https://downloads.f5.com](https://downloads.f5.com), use `scp` (secure copy) to upload the zip file to your IBM Cloud Bare Metal host. `ssh` into your host as the `root` user. 
-
-Install the unzip utility from the standard repository:
-
-``# yum install unzip
-``
-
-Unzip your zip file archive containing your TMOS Virtual Edition qcow2 disk image. As example:
-
-``# unzip BIGIP-13.1.0.3.0.0.5.ALL_1SLOT.qcow2.zip``
-
-Record the file location of the extracted qcow2 disk image for use in the next step. As example:
-
-``/root/BIGIP-13.1.0.3.0.0.5.qcow2``
+Once you have downloaded the zip file archive from [https://downloads.f5.com](https://downloads.f5.com), extract the qcow2 from the zip archive, and use `scp` (secure copy) to upload the TMOS Virtual Edition disk image to your IBM Cloud Bare Metal host. `ssh` into your host as the `root` user.
 
 ## Downloading the TMOS Virtual Edition Installation Script
 
-To obtain the TMOS Virtual Edition installation script file, download the [ibmbm_tmos_ve_install.sh](https://raw.githubusercontent.com/jgruber/f5-ibmbluemix/master/ibmbm_tmos_ve_install.sh) file from this repository.
+To obtain the TMOS Virtual Edition installation script file, download the [ibmbm_tmos_ve_install.sh](https://raw.githubusercontent.com/jgruber/f5-ibmbluemix/master/baremetal/ibmbm_tmos_ve_install.sh) file from this repository.
 
 ``# wget https://raw.githubusercontent.com/jgruber/f5-ibmbluemix/master/ibmbm_tmos_ve_install.sh``
 
@@ -184,7 +172,7 @@ REPO="jgruber"
 BRANCH="master"
 
 BIGIP_UNZIPPED_QCOW_IMAGE_URL="file:///tmp/BIGIP-13.1.0.3.0.0.5.qcow2"
-TMOS_VE_DOMAIN_TEMPLATE="https://raw.githubusercontent.com/$REPO/f5-ibmbluemix/$BRANCH/ve_domain_xml.tmpl"
+TMOS_VE_DOMAIN_TEMPLATE="https://raw.githubusercontent.com/$REPO/f5-ibmbluemix/$BRANCH/baremetal/ve_domain_standard_xml.tmpl"
 USER_DATA_URL="https://raw.githubusercontent.com/$REPO/f5-ibmbluemix/$BRANCH/ibm_init_userdata.txt"
 
 #### End Settings ####
