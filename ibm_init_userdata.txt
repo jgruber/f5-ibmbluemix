@@ -57,29 +57,177 @@ write_files:
         function setup_networking() {
             mount_config_drive
             /usr/bin/python - << EOF
-        import sys, json, subprocess  
-        network_data=json.load(open('/mnt/config/openstack/latest/network_data.json'))
+        import os, json, subprocess
+        network_data = json.load(open('/mnt/config/openstack/latest/network_data.json'))
+        onenic = False
+        fnull = open(os.devnull, 'w')
+        test_1nic = subprocess.call(['/usr/bin/tmsh', 'list', 'net', 'interface', '1.0'], stdout=fnull)
+        if test_1nic == 0:
+            onenic = True
         with open('/config/network_setup.sh','w') as ns:
             ns.write("#!/bin/bash\n")
-            ns.write("tmsh create net vlan internal interfaces replace-all-with { 1.0 }\n")
-            ns.write("tmsh create net self self_1nic address %s/%s vlan internal allow-service all\n" % (network_data['networks'][0]['ip_address'], network_data['networks'][0]['netmask']))
-            route_index = 0
-            for route in network_data['networks'][0]['routes']:
-                route_index += 1
-                if route['network'] == '0.0.0.0':
-                    ns.write("tmsh create sys management-route default gateway %s\n" % route['gateway'])
+            supported_link_types = ['phy', 'bridge', 'ovs', 'vif', 'tap']
+            supported_network_types = ['ipv4', 'ipv6']
+            default_route_set = False
+            management_link_id = None
+            management_mtu = 1500
+            management_dhcp = True
+            management_ip = None
+            management_netmask = None
+            management_default_gateway = None
+            links = {}
+            selfips = {}
+            routes = {}
+            nic_index = 0
+            # untagged interface networks
+            for link in network_data['links']:
+                mtu = 1500
+                if link['mtu']:
+                    mtu = link['mtu']
+                if nic_index == 0:
+                    management_link_id = link['id']
+                    management_mtu = mtu
+                    if not onenic:
+                        nic_index += 1
+                        continue
+                if link['type'] in supported_link_types:
+                    links[link['id']] = {
+                        'net_name': 'net_1_%s' % nic_index,
+                        'mtu': mtu,
+                        'interface': '1.%s' % nic_index,
+                        'interface_index': nic_index,
+                        'segmentation_id': 4095 - nic_index,
+                        'tagged': False,
+                        'route_domain': 0
+                    }
+                nic_index += 1
+            # vlan tagged networks
+            for link in network_data['links']:
+                if link['type'] == 'vlan':
+                    if link['vlan_link'] not in links:
+                        print "VLAN %s defined for unsupported link %s" % (
+                            link['vlan_id'], link['vlan_link'])
+                    else:
+                        if not onenic and links[link['vlan_link']]['interface_index'] == 0:
+                            print "VLAN tagging is not supported on management interface"
+                        else:
+                            links[link['id']] = {
+                                'net_name': 'vlan_%s' % link['vlan_id'],
+                                'mtu': links[link['vlan_link']]['mtu'],
+                                'interface': links[link['vlan_link']]['interface'],
+                                'interface_index': links[link['vlan_link']]['interface_index'],
+                                'segmentation_id': link['vlan_id'],
+                                'tagged': True,
+                                'route_domain': 0
+                            }
+            # L3 routes and selfips
+            for net in network_data['networks']:
+                if net['link'] == management_link_id:
+                    if net['type'] == 'ipv4_dhcp' or net['type'] == 'ipv6_dhcp':
+                        management_dhcp = True
+                    else:
+                        management_dhcp = False
+                if net['type'] in supported_network_types:
+                    for route in net['routes']:
+                        if route['network'] == '0.0.0.0' or route['network'] == '::':
+                            if net['link'] == management_link_id:
+                                management_default_gateway = route['gateway']
+                                continue
+                            elif net['link'] in links:
+                                if default_route_set:
+                                    for link in links:
+                                        link['route_domain'] = link['segmentation_id']
+                                default_route_set = True
+                    for route in net['routes']:
+                        if net['link'] in links:
+                            route['route_domain'] = links[net['link']]['route_domain']
+                            route['route_name'] = \
+                                "route_%s" % route['network'].replace(
+                                    '.', '_').replace(
+                                    ':', '_').replace(
+                                    '/', '_')
+                            if net['id'] not in routes:
+                                routes[net['id']] = []
+                            if route['network'] == '0.0.0.0' or route['network'] == '::':
+                                if route['gateway'] != management_default_gateway:
+                                    routes[net['id']].append(route)
+                            else:
+                                routes[net['id']].append(route)
+                    if net['link'] in links:
+                        netmask = None
+                        if 'netmask' in net:
+                            netmask = net['netmask']
+                        if not net['link'] == management_link_id:
+                            selfips[net['id']] = {
+                                'selfip_name': 'selfip_%s' % net['link'],
+                                'net_name': links[net['link']]['net_name'],
+                                'ip_address': net['ip_address'],
+                                'netmask': netmask,
+                                'route_domain':  links[net['link']]['route_domain']
+                            }
+                    if net['link'] == management_link_id:
+                        management_ip = net['ip_address']
+                        if 'netmask' in net:
+                            management_netmask = net['netmask']
+            # setup management interface
+            if not management_dhcp:
+                ns.write("tmsh modify sys global-settings mgmt-dhcp disabled\n")
+                if not onenic:
+                    ns.write("sleep 10\n")
+                    if management_netmask:
+                        ns.write("tmsh create sys management-ip %s/%s\n" % (management_ip, management_netmask))
+                    else:
+                        ns.write("tmsh create sys management-ip %s\n" % management_ip)
+                    if management_default_gateway:
+                        ns.write("tmsh create sys management-route default gateway %s\n" % management_default_gateway)
+                    ns.write("ip link set mgmt mtu %s\n" % management_mtu)
+                    ns.write("echo 'ip link set mgmt mtu %s' > /config/startup\n" % management_mtu)
                 else:
-                    ns.write("tmsh create net route private_%s network %s/%s gw %s\n" % (route_index, route['network'], route['netmask'], route['gateway']))
-            if len(network_data['networks']) > 1:
-                ns.write("tmsh create net vlan external interfaces replace-all-with { 1.1 }\n")
-                ns.write("tmsh create net self external address %s/%s vlan external allow-service all\n" % (network_data['networks'][1]['ip_address'], network_data['networks'][1]['netmask']))
-                route_index = 0
-                for route in network_data['networks'][1]['routes']:
-                    route_index += 1
-                    if route['network'] == '0.0.0.0':
-                        ns.write("tmsh create net route default gw %s\n" % route['gateway'])
-                    else:            
-                        ns.write("tmsh create net route public_%s network %s/%s gw %s\n" % (route_index, route['network'], route['netmask'], route['gateway']))
+                    onenic_net_name = links[management_link_id]['net_name']
+                    onenic_route_domain = links[management_link_id]['route_domain']
+                    ns.write("tmsh create net vlan %s mtu %s interfaces replace-all-with { 1.0 }\n"
+                             % (onenic_net_name, management_mtu))
+                    if management_netmask:
+                        ns.write("tmsh create net self self_1nic address %s%%%s/%s vlan %s allow-service all\n" % (management_ip, onenic_route_domain, management_netmask, onenic_net_name))
+                    else:
+                        address_parts = management_ip.split('/')
+                        ns.write("tmsh create net self self_1nic address %s%%%s/%s vlan %s allow-service all\n"
+                                 % (address_parts[0], onenic_route_domain, address_parts[1], onenic_net_name))
+                    if management_default_gateway:
+                        ns.write("tmsh create sys management-route default gateway %s\n" % management_default_gateway)
+            # setup tagged and untagged interfaces
+            for link_id in links:
+                link = links[link_id]
+                if link_id == management_link_id:
+                    continue
+                if not link['tagged']:
+                    ns.write("tmsh create net vlan %s mtu %s interfaces replace-all-with { %s }\n" % (link['net_name'], link['mtu'], link['interface']))
+                else:
+                    ns.write("tmsh create net vlan %s mtu %s interfaces replace-all-with { %s { tagged } } tag %s\n" % (link['net_name'], link['mtu'], link['interface'], link['segmentation_id']))
+                if link['route_domain'] > 0:
+                    ns.write("tmsh create net route-domain %s { id %s vlans add { %s } }\n" % (link['route_domain'], link['route_domain'], link['net_name']) )
+            # setup selfips
+            for net_id in selfips:
+                selfip = selfips[net_id]
+                if selfip['netmask']:
+                    ns.write("tmsh create net self %s address %s%%%s/%s vlan %s allow-service all\n" % (selfip['selfip_name'], selfip['ip_address'], selfip['route_domain'], selfip['netmask'], selfip['net_name']))
+                else:
+                    address_parts = selfip['ip_address'].split('/')
+                    ns.write("tmsh create net self %s address %s%%%s/%s vlan %s allow-service all\n" % (selfip['selfip_name'], address_parts[0], selfip['route_domain'], address_parts[1], selfip['net_name']))
+            # add routes
+            for net_id in routes:
+                for route in routes[net_id]:
+                    if route['network'] == '0.0.0.0' or route['network'] == '::':
+                        if route['route_domain'] > 0:
+                            ns.write("tmsh create net route default_%s network default%%%s gw %s%%%s\n" % (route['route_domain'], route['route_domain'], route['gateway'], route['route_domain']))
+                        else:
+                            ns.write("tmsh create net route default network default gw %s%%%s\n" % (route['gateway'], route['route_domain']))
+                    else:
+                        if 'netmask' in route:
+                            ns.write("tmsh create net route %s_%s network %s%%%s/%s gw %s%%%s\n" % (route['route_name'], route['route_domain'], route['network'], route['route_domain'], route['netmask'], route['gateway'], route['route_domain']))
+                        else:
+                            route_parts = route['network'].slit('/')
+                            ns.write("tmsh create net route %s_%s network %s%%%s/%s gw %s%%%s\n" % (route['route_name'], route['route_domain'], route_parts[0], route['route_domain'], route_parts[1], route['gateway'], route['route_domain']))
             dns_servers = []
             for service in network_data['services']:
                 if service['type'] == 'dns':
@@ -87,6 +235,13 @@ write_files:
             if dns_servers:
                 dns_server_string = " ".join(dns_servers)
                 ns.write("tmsh modify sys dns name-servers replace-all-with { %s }\n" % dns_server_string)
+            ntp_servers = []
+            for service in network_data['services']:
+                if service['type'] == 'ntp':
+                    ntp_servers.append(service['address'])
+            if ntp_servers:
+                ntp_server_string = " ".join(ntp_servers)
+                ns.write("tmsh modify sys ntp servers replace-all-with { %s }\n" % ntp_server_string)
         EOF
             chmod +x /config/network_setup.sh
             /config/network_setup.sh
