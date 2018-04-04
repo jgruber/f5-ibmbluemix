@@ -24,15 +24,45 @@ function install_hypervisor() {
     systemctl start libvirtd.service
     /sbin/sysctl -w net.ipv4.ip_forward=1
     echo 'net.ipv4.ip_forward = 1' >> /etc/sysctl.conf
-    chkconfig NetworkManager off 
+    chkconfig NetworkManager off
 }
 
 function get_config_drive_template() {
     mkdir -p /tmp/config_drive/openstack/latest
     create_meta_data_json > /tmp/config_drive/openstack/latest/meta_data.json
+    python -m json.tool < /tmp/config_drive/openstack/latest/meta_data.json > /dev/null 2>&1
+    if [ $? -ne 0 ];
+    then
+        echo "ERROR: Generated meta_data.json was not valid. Exiting.."
+        cleanup_and_exit
+    fi
     create_network_json > /tmp/config_drive/openstack/latest/network_data.json
+    python -m json.tool < /tmp/config_drive/openstack/latest/network_data.json > /dev/null 2>&1
+    if [ $? -ne 0 ];
+    then
+        echo "ERROR: Generated network_data.json was not valid. Exiting.."
+        cleanup_and_exit
+    else
+        echo
+        echo "Generated network metadata is:"
+        echo 
+        cat  /tmp/config_drive/openstack/latest/network_data.json
+        echo
+        echo
+    fi
     if ! [ -f /tmp/config_drive/openstack/latest/user_data ]; then
         curl -o /tmp/config_drive/openstack/latest/user_data $USER_DATA_URL
+        if [ $? -ne 0 ];
+        then
+            echo "ERROR: Could not retrieve user_data template from: $USER_DATA_URL. Exiting.."
+            cleanup_and_exit
+        fi
+    fi
+    python -m json.tool < /tmp/config_drive/openstack/latest/user_data > /dev/null 2>&1
+    if [ $? -ne 0 ];
+    then
+        echo "ERROR: The user_data template was not valid. Exiting.."
+        cleanup_and_exit
     fi
     sed -i -e "s/__TMOS_ADMIN_PASSWORD__/$TMOS_ADMIN_PASSWORD/g" /tmp/config_drive/openstack/latest/user_data
     sed -i -e "s/__TMOS_ROOT_PASSWORD__/$TMOS_ROOT_PASSWORD/g" /tmp/config_drive/openstack/latest/user_data
@@ -41,23 +71,39 @@ function get_config_drive_template() {
 function get_ve_domain_template() {
     if ! [ -f /tmp/ve_domain_xml.tmpl ]; then
         curl -o /tmp/ve_domain_xml.tmpl $TMOS_VE_DOMAIN_TEMPLATE
+        if [ $? -ne 0 ];
+        then
+            echo "ERROR: Could not retrieve libvirt domain XML template from: $TMOS_VE_DOMAIN_TEMPLATE. Exiting.."
+            cleanup_and_exit
+        fi
     fi
 }
 
 function get_ve_image() {
     if ! [ -f /var/lib/libvirt/images/bigipve.qcow2 ]; then
         curl -o /var/lib/libvirt/images/bigipve.qcow2 $BIGIP_UNZIPPED_QCOW_IMAGE_URL
+        if [ $? -ne 0 ];
+        then
+            echo "ERROR: Could not retrieve TMOS Virtual Edition disk image from: $BIGIP_UNZIPPED_QCOW_IMAGE_URL. Exiting.."
+            cleanup_and_exit
+        fi
+        is_qcow=$(qemu-img info /home/jgruber/Dropbox/SteemWhitePaper.pdf | grep "format: qcow2" | wc -l)
+        if [ $is_qcow -ne 1 ];
+        then
+            echo "ERROR: The image file: $BIGIP_UNZIPPED_QCOW_IMAGE_URL, is not a qcow2 disk image. Did you unzip? Exiting.."
+            cleanup_and_exit
+        fi
     fi
 }
 
 function get_public_interface() {
     public_interface=$(ip route|grep default|cut -d' ' -f5);
-    echo $public_interface  
+    echo $public_interface
 }
 
 function get_private_interface() {
     private_interface=$(ip route|grep 10.0.0.0/8|cut -d' ' -f5);
-    echo $private_interface 
+    echo $private_interface
 }
 
 function cidr2mask() {
@@ -71,7 +117,7 @@ function cidr2mask() {
       mask+=$((256 - 2**(8-$partial_octet)))
     else
       mask+=0
-    fi  
+    fi
     test $i -lt 3 && mask+=.
   done
   echo $mask
@@ -117,7 +163,7 @@ function create_network_json() {
         done <<< "$(cat /etc/sysconfig/network-scripts/route-"$private_interface")"
     fi
 
-    public_interface=$(get_public_interface);    
+    public_interface=$(get_public_interface);
     if [ $private_interface != $public_interface ]; then
         public_mac_address=$(cat /sys/class/net/$public_interface/address)
         public_mtu=$(cat /sys/class/net/$public_interface/mtu)
@@ -152,7 +198,7 @@ function create_network_json() {
     fi
     echo -n "], "
     #end links
-    #start networks 
+    #start networks
     echo -n "\"networks\": [ "
     echo -n "{ \"id\": \"private\", \"link\": \"private_link\", \"type\": \"ipv4\", \"ip_address\": \"${private_ip_address}\", \"netmask\": \"${private_netmask}\", "
     echo -n "\"routes\": ["
@@ -168,7 +214,7 @@ function create_network_json() {
             network=$(echo $cidr|cut -d'/' -f1)
             maskbits=$(echo $cidr|cut -d'/' -f2)
             netmask=$(cidr2mask $maskbits)
-            private_route_json="${private_route_json} { \"network\": \"${network}\", \"netmask\": \"${netmask}\", \"gateway\": \"${gateway}\" }," 
+            private_route_json="${private_route_json} { \"network\": \"${network}\", \"netmask\": \"${netmask}\", \"gateway\": \"${gateway}\" },"
         done
         if [[ ! -z "${private_route_json}" ]]; then
             echo -n "${private_route_json::-1} "
@@ -191,7 +237,7 @@ function create_network_json() {
                 network=$(echo $cidr|cut -d'/' -f1)
                 maskbits=$(echo $cidr|cut -d'/' -f2)
                 netmask=$(cidr2mask $maskbits)
-                public_route_json="${public_route_json} { \"network\": \"${network}\", \"netmask\": \"${netmask}\", \"gateway\": \"${gateway}\" }," 
+                public_route_json="${public_route_json} { \"network\": \"${network}\", \"netmask\": \"${netmask}\", \"gateway\": \"${gateway}\" },"
             done
         fi
         if [[ ! -z "${public_route_json}" ]]; then
@@ -242,7 +288,7 @@ function migrate_private_interface_to_bridge() {
     sed -i '/IPADDR/d' /etc/sysconfig/network-scripts/ifcfg-$private_interface
     sed -i '/NETMASK/d' /etc/sysconfig/network-scripts/ifcfg-$private_interface
     echo 'BRIDGE=private' >> /etc/sysconfig/network-scripts/ifcfg-$private_interface
-    mv /etc/sysconfig/network-scripts/route-$private_interface /etc/sysconfig/network-scripts/dist-route-$private_interface 
+    mv /etc/sysconfig/network-scripts/route-$private_interface /etc/sysconfig/network-scripts/dist-route-$private_interface
 }
 
 function generate_public_bridge() {
@@ -303,12 +349,19 @@ function setup_ve_host_domain() {
     vcpus=$(get_CPU_count)
     mem=$(get_memory)
     sed -i -e "s/__HOSTNAME__/$hostname/g" /tmp/ve_domain_xml.tmpl
-    sed -i -e "s/__F5_CHASIS_SERIAL_NUMBER__/$systemid/g" /tmp/ve_domain_xml.tmpl 
-    sed -i -e "s/__VE_RAM__/$mem/g" /tmp/ve_domain_xml.tmpl 
-    sed -i -e "s/__VE_CPUS__/$vcpus/g" /tmp/ve_domain_xml.tmpl 
+    sed -i -e "s/__F5_CHASIS_SERIAL_NUMBER__/$systemid/g" /tmp/ve_domain_xml.tmpl
+    sed -i -e "s/__VE_RAM__/$mem/g" /tmp/ve_domain_xml.tmpl
+    sed -i -e "s/__VE_CPUS__/$vcpus/g" /tmp/ve_domain_xml.tmpl
     sed -i -e "s/__TMOS_VERSION__/13.1.0/g" /tmp/ve_domain_xml.tmpl
     virsh define /tmp/ve_domain_xml.tmpl
     virsh autostart $hostname
+}
+
+function cleanup_and_exit() {
+	rm -rf /tmp/config_drive > /dev/null 2>&1
+	rm -rf /var/lib/libvirt/images/bigipve.qcow2 > /dev/null 2>&1
+	rm -rf /tmp/ve_domain_xml.tmpl > /dev/null 2>&1
+	exit 1
 }
 
 function main() {
