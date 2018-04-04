@@ -162,9 +162,9 @@ To obtain the TMOS Virtual Edition installation script file, download the [ibmbm
 
 ``# wget https://raw.githubusercontent.com/jgruber/f5-ibmbluemix/master/baremetal/ibmbm_tmos_ve_install.sh``
 
-Before running the TMOS Virtual Edition installation script, there are settings which determine which TMOS Virtual Edition disk to download, which virtual machine domain XML template to use, and which user_data meta data template to use for TMOS resource provisioning, and the built in account passwords to set during installation. Each of these settings are read as environment variables by the TMOS Virtual Edition installation script.
+Before running the TMOS Virtual Edition installation script, there are settings which determine which TMOS Virtual Edition disk to download, which virtual machine domain XML template to use, which user_data metadata template to use for TMOS resource provisioning, and the built in account passwords to set during installation. Each of these settings are read as environment variables by the TMOS Virtual Edition installation script.
 
-An example of export these settings follows. You will need to export these environment variables before executing the script.
+An example of exporting the installation script settings environment variables is as follows:
 
 ```
 export TMOS_ADMIN_PASSWORD=ibmsoftlayer
@@ -173,6 +173,18 @@ export BIGIP_UNZIPPED_QCOW_IMAGE_URL=file:///tmp/BIGIP-13.1.0.3.0.0.5.qcow2
 export TMOS_VE_DOMAIN_TEMPLATE=https://raw.githubusercontent.com/jgruber/f5-ibmbluemix/master/baremetal/ve_domain_standard_xml.tmpl
 export USER_DATA_URL=https://raw.githubusercontent.com/jgruber/f5-ibmbluemix/master/ibm_init_userdata.txt
 ```
+
+You will need to export these environment variables before executing the script. If these variables are not set, their default values are as follows:
+
+Env Variable    |  Default | Description
+--- | --- | --- 
+TMOS_ADMIN_PASSWORD | ibmsoftlayer | The value to set the TMOS admin account password
+TMOS_ROOT_PASSWORD | ibmsoftlayer | The value to set the TMOS root account password
+BIGIP_UNZIPPED_QCOW_IMAGE_URL | file:///tmp/BIGIP-13.1.0.3.0.0.5.qcow2 | The URL location of the TMOS Virtual Edition qcow disk image. This can be http://, https://, or file://. Use file:// if you used another tool to download the TMOS Virtual Edition disk image to the bare metal host.
+TMOS_VE_DOMAIN_TEMPLATE | file:///tmp/ve_domain_standard_xml.tmpl | The libvirt domain XML template to use for the TMOS Virtual Edition instance
+USER_DATA_URL| file:///tmp/ibm_init_userdata.txt | The cloud-init user_data metadata template to use for TMOS Virtual Edition provisioning
+
+The TMOS Virtual Edition will check the validity of each of these settings and will exit operation if they are not available or are not of the right format.
 
 ## Running the TMOS Virtual Edition Installation Script
 
