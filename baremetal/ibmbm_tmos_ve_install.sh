@@ -19,7 +19,7 @@ USER_DATA_URL="https://raw.githubusercontent.com/$REPO/f5-ibmbluemix/$BRANCH/ibm
 #### End Settings ####
 
 function install_hypervisor() {
-    yum -y install qemu-kvm libvirt virt-install bridge-utils iptables-services genisoimage
+    yum -y install qemu-kvm libvirt virt-install bridge-utils iptables-services genisoimage python-yaml
     systemctl enable iptables.service
     systemctl start libvirtd.service
     /sbin/sysctl -w net.ipv4.ip_forward=1
@@ -58,7 +58,7 @@ function get_config_drive_template() {
             cleanup_and_exit
         fi
     fi
-    python -m json.tool < /tmp/config_drive/openstack/latest/user_data > /dev/null 2>&1
+    python -c 'import yaml,sys;yaml.safe_load(sys.stdin)' < /tmp/config_drive/openstack/latest/user_data > /dev/null 2>&1
     if [ $? -ne 0 ];
     then
         echo "ERROR: The user_data template was not valid. Exiting.."
@@ -87,7 +87,7 @@ function get_ve_image() {
             echo "ERROR: Could not retrieve TMOS Virtual Edition disk image from: $BIGIP_UNZIPPED_QCOW_IMAGE_URL. Exiting.."
             cleanup_and_exit
         fi
-        is_qcow=$(qemu-img info /home/jgruber/Dropbox/SteemWhitePaper.pdf | grep "format: qcow2" | wc -l)
+        is_qcow=$(qemu-img info /var/lib/libvirt/images/bigipve.qcow2 | grep "format: qcow2" | wc -l)
         if [ $is_qcow -ne 1 ];
         then
             echo "ERROR: The image file: $BIGIP_UNZIPPED_QCOW_IMAGE_URL, is not a qcow2 disk image. Did you unzip? Exiting.."
