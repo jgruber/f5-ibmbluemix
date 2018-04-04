@@ -162,32 +162,21 @@ To obtain the TMOS Virtual Edition installation script file, download the [ibmbm
 
 ``# wget https://raw.githubusercontent.com/jgruber/f5-ibmbluemix/master/baremetal/ibmbm_tmos_ve_install.sh``
 
-``# vi ibmbm_tmos_ve_install.sh``
+Before running the TMOS Virtual Edition installation script, there are settings which determine which TMOS Virtual Edition disk to download, which virtual machine domain XML template to use, and which user_data meta data template to use for TMOS resource provisioning, and the built in account passwords to set during installation. Each of these settings are read as environment variables by the TMOS Virtual Edition installation script.
+
+An example of export these settings follows. You will need to export these environment variables before executing the script.
 
 ```
-#### Settings ####
-
-# TMOS Virtual edition well known account settings
-
-TMOS_ADMIN_PASSWORD="ibmsoftlayer"
-TMOS_ROOT_PASSWORD="ibmsoftlayer"
-
-# Github repo and branch for KVM environment and user_data templates
-
-REPO="jgruber"
-BRANCH="master"
-
-BIGIP_UNZIPPED_QCOW_IMAGE_URL="file:///tmp/BIGIP-13.1.0.3.0.0.5.qcow2"
-TMOS_VE_DOMAIN_TEMPLATE="https://raw.githubusercontent.com/$REPO/f5-ibmbluemix/$BRANCH/baremetal/ve_domain_standard_xml.tmpl"
-USER_DATA_URL="https://raw.githubusercontent.com/$REPO/f5-ibmbluemix/$BRANCH/ibm_init_userdata.txt"
-
-#### End Settings ####
-
+export TMOS_ADMIN_PASSWORD=ibmsoftlayer
+export TMOS_ROOT_PASSWORD=ibmsoftlayer
+export BIGIP_UNZIPPED_QCOW_IMAGE_URL=file:///tmp/BIGIP-13.1.0.3.0.0.5.qcow2
+export TMOS_VE_DOMAIN_TEMPLATE=https://raw.githubusercontent.com/jgruber/f5-ibmbluemix/master/baremetal/ve_domain_standard_xml.tmpl
+export USER_DATA_URL=https://raw.githubusercontent.com/jgruber/f5-ibmbluemix/master/ibm_init_userdata.txt
 ```
 
 ## Running the TMOS Virtual Edition Installation Script
 
-Execute the TMOS Virtual Edition installation script.
+Once the settings environment variables are exported, execute the TMOS Virtual Edition installation script.
 
 ``# bash ibmbm_tmos_ve_install.sh``
 
