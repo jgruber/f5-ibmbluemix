@@ -4,17 +4,18 @@
 
 # TMOS Virtual edition well known account settings
 
-TMOS_ADMIN_PASSWORD="ibmsoftlayer"
-TMOS_ROOT_PASSWORD="ibmsoftlayer"
+[[ -z $TMOS_ADMIN_PASSWORD ]] && TMOS_ADMIN_PASSWORD="ibmsoftlayer"
+[[ -z $TMOS_ROOT_PASSWORD ]] && TMOS_ROOT_PASSWORD="ibmsoftlayer"
 
 # Github repo and branch for KVM environment and user_data templates
+
+[[ -z $BIGIP_UNZIPPED_QCOW_IMAGE_URL ]] && BIGIP_UNZIPPED_QCOW_IMAGE_URL="file:///tmp/BIGIP-13.1.0.3.0.0.5.qcow2"
 
 REPO="jgruber"
 BRANCH="master"
 
-BIGIP_UNZIPPED_QCOW_IMAGE_URL="file:///tmp/BIGIP-13.1.0.3.0.0.5.qcow2"
-TMOS_VE_DOMAIN_TEMPLATE="https://raw.githubusercontent.com/$REPO/f5-ibmbluemix/$BRANCH/baremetal/ve_domain_standard_xml.tmpl"
-USER_DATA_URL="https://raw.githubusercontent.com/$REPO/f5-ibmbluemix/$BRANCH/ibm_init_userdata.txt"
+[[ -z $TMOS_VE_DOMAIN_TEMPLATE ]] && TMOS_VE_DOMAIN_TEMPLATE="https://raw.githubusercontent.com/$REPO/f5-ibmbluemix/$BRANCH/baremetal/ve_domain_standard_xml.tmpl"
+[[ -z $USER_DATA_URL ]] && USER_DATA_URL="https://raw.githubusercontent.com/$REPO/f5-ibmbluemix/$BRANCH/ibm_init_userdata.txt"
 
 #### End Settings ####
 
