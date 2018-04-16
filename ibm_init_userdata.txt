@@ -91,7 +91,7 @@ write_files:
                         n_idx += 1
                         continue
                 if l['type'] in supported_link_types:
-                    links[l['id']] = { 'net_name': 'net_1_%s' % n_idx, 'mtu': mtu, 'interface': '1.%s' % n_idx, 'interface_index': n_idx, 'segmentation_id': 4095 - n_idx, 'tagged': False, 'route_domain': 0 }
+                    links[l['id']] = { 'net_name': 'net_1_%s' % n_idx, 'mtu': mtu, 'interface': '1.%s' % n_idx, 'interface_index': n_idx, 'segmentation_id': 4094 - n_idx, 'tagged': False, 'route_domain': 0 }
                 n_idx += 1
             # vlan tagged networks
             for l in nmd['links']:
@@ -130,10 +130,10 @@ write_files:
                                 mgmt_df_gw = r['gateway']
                                 continue
                             elif n['link'] in links:
-                                if df_gw_set:
-                                    for l in links:
-                                        l['route_domain'] = l['segmentation_id']
                                 df_gw_set = True
+                        if df_gw_set:
+                            for l in links:
+                                links[l]['route_domain'] = links[l]['segmentation_id']
                     for r in n['routes']:
                         if n['link'] in links:
                             r['route_domain'] = links[n['link']]['route_domain']
@@ -170,24 +170,24 @@ write_files:
                     ns.write("echo 'ip link set mgmt mtu %s' > /config/startup\n" % mgmt_mtu)
                 else:
                     onenic_net_name = links[mgmt_link_id]['net_name']
-                    onenic_route_domain = links[mgmt_link_id]['route_domain']
-                    ns.write("tmsh create net vlan %s mtu %s interfaces replace-all-with { 1.0 }\n"
-                             % (onenic_net_name, mgmt_mtu))
+                    ns.write("tmsh create net vlan %s mtu %s interfaces replace-all-with { 1.0 } tag %s\n"
+                             % (onenic_net_name, mgmt_mtu, 0))
                     if mgmt_netmask:
-                        ns.write("tmsh create net self self_1nic address %s%%%s/%s vlan %s allow-service all\n" % (mgmt_ip, onenic_route_domain, mgmt_netmask, onenic_net_name))
+                        ns.write("tmsh create net self self_1nic address %s%%%s/%s vlan %s allow-service all\n" % (mgmt_ip, 0, mgmt_netmask, onenic_net_name))
                     else:
                         address_parts = mgmt_ip.split('/')
                         ns.write("tmsh create net self self_1nic address %s%%%s/%s vlan %s allow-service all\n"
-                                 % (address_parts[0], onenic_route_domain, address_parts[1], onenic_net_name))
+                                 % (address_parts[0], 0, address_parts[1], onenic_net_name))
                     if mgmt_df_gw:
                         ns.write("tmsh create sys management-route default gateway %s\n" % mgmt_df_gw)
+                        ns.write("tmsh create net route default network default gw %s\n" % mgmt_df_gw)
             # setup tagged and untagged interfaces
             for l_id in links:
                 l = links[l_id]
                 if l_id == mgmt_link_id:
                     continue
                 if not l['tagged']:
-                    ns.write("tmsh create net vlan %s mtu %s interfaces replace-all-with { %s }\n" % (l['net_name'], l['mtu'], l['interface']))
+                    ns.write("tmsh create net vlan %s mtu %s interfaces replace-all-with { %s } tag %s\n" % (l['net_name'], l['mtu'], l['interface'], l['segmentation_id']))
                 else:
                     ns.write("tmsh create net vlan %s mtu %s interfaces replace-all-with { %s { tagged } } tag %s\n" % (l['net_name'], l['mtu'], l['interface'], l['segmentation_id']))
                 if l['route_domain'] > 0:
