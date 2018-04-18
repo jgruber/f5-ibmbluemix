@@ -27,7 +27,7 @@ write_files:
             /usr/bin/passwd admin __TMOS_ADMIN_PASSWORD__ >/dev/null 2>&1
             /usr/bin/passwd root __TMOS_ROOT_PASSWORD__ >/dev/null 2>&1
         }
-        function setup_1_nic_config() {
+        function setup_base() {
             tmsh modify sys db provision.1nic value forced_enable
             tmsh modify sys global-settings mgmt-dhcp disabled
         }
@@ -238,8 +238,8 @@ write_files:
             setup_init
             echo "changing well known account passwords"
             setup_passwords
-            echo "forcing single NIC configuration"
-            setup_1_nic_config
+            echo "provisioning base management"
+            setup_base
             echo "importing SSH keys"
             import_ssh_keys
             echo "provisioning networking from cloud-init network metadata"
