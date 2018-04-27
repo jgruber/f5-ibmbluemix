@@ -52,7 +52,13 @@ write_files:
         for key in meta_data['public_keys']:
             with open('/root/.ssh/authorized_keys', 'a') as ak:
                 ak.write(meta_data['public_keys'][key] + '\n')
+        with open('/config/host_setup.sh','w') as hs:
+            hs.write("#!/bin/bash\ntmsh modify sys global-settings hostname %s\n" % meta_data['hostname'])
+            hs.write("tmsh delete cm trust-domain all\ntmsh mv cm device bigip1 %s\n" % meta_data['hostname'])
+            hs.write("tmsh modify sys global-settings gui-setup disabled\n")
         EOF
+            chmod +x /config/host_setup.sh
+            /config/host_setup.sh
         }
         function setup_networking() {
             mount_config_drive
@@ -68,32 +74,21 @@ write_files:
             ns.write("#!/bin/bash\n")
             supported_link_types = ['phy', 'bridge', 'ovs', 'vif', 'tap']
             supported_network_types = ['ipv4', 'ipv6']
-            df_gw_set = False
-            mgmt_link_id = None
-            mgmt_mtu = 1500
-            mgmt_dhcp = False
-            mgmt_ip = None
-            mgmt_netmask = None
-            mgmt_df_gw = None
-            links = {}
-            selfips = {}
-            routes = {}
+            df_gw_set = mgmt_dhcp = False
+            mgmt_link_id = mgmt_ip = mgmt_netmask = mgmt_df_gw = None
+            links, selfips, routes = {},{},{}
             n_idx = 0
-            # untagged interface networks
             for l in nmd['links']:
-                mtu = 1500
-                if l['mtu']:
-                    mtu = l['mtu']
+                if not l['mtu']:
+                    l['mtu'] = 1500
                 if n_idx == 0:
                     mgmt_link_id = l['id']
-                    mgmt_mtu = mtu
                     if not onenic:
                         n_idx += 1
                         continue
                 if l['type'] in supported_link_types:
-                    links[l['id']] = { 'net_name': 'net_1_%s' % n_idx, 'mtu': mtu, 'interface': '1.%s' % n_idx, 'interface_index': n_idx, 'segmentation_id': 4094 - n_idx, 'tagged': False, 'route_domain': 0 }
+                    links[l['id']] = { 'net_name': 'net_1_%s' % n_idx, 'mtu': l['mtu'], 'interface': '1.%s' % n_idx, 'interface_index': n_idx, 'segmentation_id': 4094 - n_idx, 'tagged': False, 'route_domain': 0 }
                 n_idx += 1
-            # vlan tagged networks
             for l in nmd['links']:
                 if l['type'] == 'vlan':
                     if l['vlan_link'] not in links:
@@ -125,15 +120,15 @@ write_files:
                         mgmt_dhcp = False
                 if n['type'] in supported_network_types:
                     for r in n['routes']:
+                        if df_gw_set:
+                            for l in links:
+                                links[l]['route_domain'] = links[l]['segmentation_id']
                         if r['network'] == '0.0.0.0' or r['network'] == '::':
                             if n['link'] == mgmt_link_id:
                                 mgmt_df_gw = r['gateway']
                                 continue
                             elif n['link'] in links:
                                 df_gw_set = True
-                        if df_gw_set:
-                            for l in links:
-                                links[l]['route_domain'] = links[l]['segmentation_id']
                     for r in n['routes']:
                         if n['link'] in links:
                             r['route_domain'] = links[n['link']]['route_domain']
@@ -166,12 +161,12 @@ write_files:
                         ns.write("tmsh create sys management-ip %s\n" % mgmt_ip)
                     if mgmt_df_gw:
                         ns.write("tmsh create sys management-route default gateway %s\n" % mgmt_df_gw)
-                    ns.write("ip link set mgmt mtu %s\n" % mgmt_mtu)
-                    ns.write("echo 'ip link set mgmt mtu %s' > /config/startup\n" % mgmt_mtu)
+                    ns.write("ip link set mgmt mtu %s\n" % links[mgmt_link_id]['mtu'])
+                    ns.write("echo 'ip link set mgmt mtu %s' > /config/startup\n" % links[mgmt_link_id]['mtu'])
                 else:
                     onenic_net_name = links[mgmt_link_id]['net_name']
                     ns.write("tmsh create net vlan %s mtu %s interfaces replace-all-with { 1.0 } tag %s\n"
-                             % (onenic_net_name, mgmt_mtu, 0))
+                             % (onenic_net_name, links[mgmt_link_id]['mtu'], 0))
                     if mgmt_netmask:
                         ns.write("tmsh create net self self_1nic address %s%%%s/%s vlan %s allow-service all\n" % (mgmt_ip, 0, mgmt_netmask, onenic_net_name))
                     else:
@@ -215,12 +210,17 @@ write_files:
                             rp = r['network'].slit('/')
                             ns.write("tmsh create net route %s_%s network %s%%%s/%s gw %s%%%s\n" % (r['route_name'], r['route_domain'], rp[0], r['route_domain'], rp[1], r['gateway'], r['route_domain']))
             ds = []
+            ns = []
             for service in nmd['services']:
                 if service['type'] == 'dns':
                     ds.append(service['address'])
+                if service['type'] == 'ntp':
+                    ns.append(service['address'])
             if ds:
-                ds_string = " ".join(ds)
-                ns.write("tmsh modify sys dns name-servers replace-all-with { %s }\n" % ds_string)
+                ns.write("tmsh modify sys dns name-servers replace-all-with { %s }\n" % " ".join(ds))
+            if not ns:
+                ns.append("10.0.77.54")
+            ns.write("tmsh modify sys ntp servers replace-all-with { %s }\n" % " ".join(ns))
         EOF
             chmod +x /config/network_setup.sh
             /config/network_setup.sh
