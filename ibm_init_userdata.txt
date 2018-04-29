@@ -126,6 +126,8 @@ write_files:
                         if r['network'] == '0.0.0.0' or r['network'] == '::':
                             if n['link'] == mgmt_link_id:
                                 mgmt_df_gw = r['gateway']
+                                if onenic:
+                                    df_gw_set = True
                                 continue
                             elif n['link'] in links:
                                 df_gw_set = True
@@ -210,7 +212,7 @@ write_files:
                             rp = r['network'].slit('/')
                             ns.write("tmsh create net route %s_%s network %s%%%s/%s gw %s%%%s\n" % (r['route_name'], r['route_domain'], rp[0], r['route_domain'], rp[1], r['gateway'], r['route_domain']))
             ds = []
-            ns = []
+            ts = []
             for service in nmd['services']:
                 if service['type'] == 'dns':
                     ds.append(service['address'])
@@ -218,8 +220,8 @@ write_files:
                     ns.append(service['address'])
             if ds:
                 ns.write("tmsh modify sys dns name-servers replace-all-with { %s }\n" % " ".join(ds))
-            if not ns:
-                ns.append("10.0.77.54")
+            if not ts:
+                ts.append("10.0.77.54")
             ns.write("tmsh modify sys ntp servers replace-all-with { %s }\n" % " ".join(ns))
         EOF
             chmod +x /config/network_setup.sh
