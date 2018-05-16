@@ -10,8 +10,20 @@
 # Disk image and metadata templates
 
 [[ -z $BIGIP_UNZIPPED_QCOW_IMAGE_URL ]] && BIGIP_UNZIPPED_QCOW_IMAGE_URL="file:///tmp/BIGIP-13.1.0.3.0.0.5.qcow2"
-[[ -z $TMOS_VE_DOMAIN_TEMPLATE ]] && TMOS_VE_DOMAIN_TEMPLATE="file:///tmp/ve_domain_standard_xml.tmpl"
+[[ -z $TMOS_VE_DOMAIN_TEMPLATE ]] && TMOS_VE_DOMAIN_TEMPLATE="file:///tmp/ve_domain_3_nic_virtio_mq_xml.tmpl"
 [[ -z $USER_DATA_URL ]] && USER_DATA_URL="file:///tmp/ibm_init_userdata.txt"
+
+# Portable network setup
+
+[[ -z $PORTABLE_PRIVATE_ADDRESS ]] && PORTABLE_PRIVATE_ADDRESS=""
+[[ -z $PORTABLE_PRIVATE_NETMASK ]] && PORTABLE_PRIVATE_NETMASK=""
+[[ -z $PORTABLE_PRIVATE_GATEWAY ]] && PORTABLE_PRIVATE_GATEWAY=""
+
+[[ -z $PORTABLE_PUBLIC_ADDRESS ]] && PORTABLE_PUBLIC_ADDRESS=""
+[[ -z $PORTABLE_PUBLIC_NETMASK ]] && PORTABLE_PUBLIC_NETMASK=""
+[[ -z $PORTABLE_PUBLIC_GATEWAY ]] && PORTABLE_PUBLIC_GATEWAY=""
+
+[[ -z $TMOS_LICENSE_BASEKEY ]] && TMOS_LICENSE_BASEKEY=""
 
 #### End Settings ####
 
@@ -42,7 +54,7 @@ function get_config_drive_template() {
     else
         echo
         echo "Generated network metadata is:"
-        echo 
+        echo
         cat  /tmp/config_drive/openstack/latest/network_data.json
         echo
         echo
@@ -63,6 +75,7 @@ function get_config_drive_template() {
     fi
     sed -i -e "s/__TMOS_ADMIN_PASSWORD__/$TMOS_ADMIN_PASSWORD/g" /tmp/config_drive/openstack/latest/user_data
     sed -i -e "s/__TMOS_ROOT_PASSWORD__/$TMOS_ROOT_PASSWORD/g" /tmp/config_drive/openstack/latest/user_data
+    sed -i -e "s/__TMOS_LICENSE_BASEKEY__/$TMOS_LICENSE_BASEKEY/g" /tmp/config_drive/openstack/latest/user_data
 }
 
 function get_ve_domain_template() {
@@ -120,6 +133,43 @@ function cidr2mask() {
   echo $mask
 }
 
+function create_macvtap_scripts() {
+    upscript='/etc/sysconfig/network-scripts/ifup-macvlan'
+    cat > $upscript <<EOF
+. /etc/init.d/functions
+cd /etc/sysconfig/network-scripts
+. ./network-functions
+[ -f ../network ] && . ../network
+CONFIG=${1}
+need_config ${CONFIG}
+source_config
+OTHERSCRIPT="/etc/sysconfig/network-scripts/ifup-${REAL_DEVICETYPE}"
+if [ ! -x ${OTHERSCRIPT} ]; then
+    OTHERSCRIPT="/etc/sysconfig/network-scripts/ifup-eth"
+fi
+ip link add link ${MACVLAN_PARENT} name ${DEVICE} type ${TYPE:-macvlan} mode ${MACVLAN_MODE:-private}
+${OTHERSCRIPT} ${CONFIG}
+EOF
+    downscript='/etc/sysconfig/network-scripts/ifdown-macvlan'
+    cat > $downscript <<EOF
+. /etc/init.d/functions
+cd /etc/sysconfig/network-scripts
+. ./network-functions
+[ -f ../network ] && . ../network
+CONFIG=${1}
+need_config ${CONFIG}
+source_config
+OTHERSCRIPT="/etc/sysconfig/network-scripts/ifup-${REAL_DEVICETYPE}"
+if [ ! -x ${OTHERSCRIPT} ]; then
+    OTHERSCRIPT="/etc/sysconfig/network-scripts/ifdown-eth"
+fi
+${OTHERSCRIPT} ${CONFIG}
+ip link del ${DEVICE} type ${TYPE:-macvlan}
+EOF
+    chmod +x $upscript
+    chmod +x $downscript
+}
+
 function create_meta_data_json() {
     hostname=$(hostname);
     echo -n "{ ";
@@ -142,41 +192,66 @@ function create_meta_data_json() {
 }
 
 function create_network_json() {
-
-    private_only=0;
-
     private_interface=$(get_private_interface);
     private_mtu=$(cat /sys/class/net/$private_interface/mtu)
     private_mac_address=$(cat /sys/class/net/$private_interface/address)
+    private_mvtap_mac=$(echo "02${private_mac_address:2:15}")
     private_ip_address=$(cat /etc/sysconfig/network-scripts/ifcfg-$private_interface|grep IPADDR|cut -d= -f2)
-    private_netmask=$(cat /etc/sysconfig/network-scripts/ifcfg-$private_interface|grep NETMASK|cut -d= -f2)
-    private_default_gateway=$(cat /etc/sysconfig/network-scripts/ifcfg-$private_interface|grep GATEWAY|cut -d= -f2)
-    private_routes=""
-    if [ -f /etc/sysconfig/network-scripts/route-$private_interface ]; then
-        while read route; do
-            network=$(echo $route|cut -d' ' -f1)
-            gateway=$(echo $route|cut -d' ' -f3)
-            private_routes="${private_routes} ${network}:${gateway}"
-        done <<< "$(cat /etc/sysconfig/network-scripts/route-"$private_interface")"
+    if [ ! -z $PORTABLE_PRIVATE_ADDRESS ]; then
+        private_ip_address=$PORTABLE_PRIVATE_ADDRESS
     fi
-
-    public_interface=$(get_public_interface);
-    if [ $private_interface != $public_interface ]; then
-        public_mac_address=$(cat /sys/class/net/$public_interface/address)
-        public_mtu=$(cat /sys/class/net/$public_interface/mtu)
-        public_ip_address=$(cat /etc/sysconfig/network-scripts/ifcfg-$public_interface|grep IPADDR|cut -d= -f2)
-        public_netmask=$(cat /etc/sysconfig/network-scripts/ifcfg-$public_interface|grep NETMASK|cut -d= -f2)
-        public_default_gateway=$(cat /etc/sysconfig/network-scripts/ifcfg-$public_interface|grep GATEWAY|cut -d= -f2)
-        public_routes=""
-        if [ -f /etc/sysconfig/network-scripts/route-$public_interface ]; then
+    private_netmask=$(cat /etc/sysconfig/network-scripts/ifcfg-$private_interface|grep NETMASK|cut -d= -f2)
+    if [ ! -z $PORTABLE_PRIVATE_NETMASK ]; then
+        private_netmask=$PORTABLE_PRIVATE_NETMASK
+    fi
+    private_default_gateway=$(cat /etc/sysconfig/network-scripts/ifcfg-$private_interface|grep GATEWAY|cut -d= -f2)
+    if [ ! -z $PORTABLE_PRIVATE_GATEWAY ]; then
+        private_default_gateway=$PORTABLE_PRIVATE_GATEWAY
+    fi
+    private_routes=""
+    if [ ! -z $PORTABLE_PRIVATE_GATEWAY ]; then
+        if [ -f /etc/sysconfig/network-scripts/route-$private_interface ]; then
+            while read route; do
+                network=$(echo $route|cut -d' ' -f1)
+                private_routes="${private_routes} ${network}:${private_default_gateway}"
+            done <<< "$(cat /etc/sysconfig/network-scripts/route-"$private_interface")"
+        fi
+    else
+        if [ -f /etc/sysconfig/network-scripts/route-$private_interface ]; then
             while read route; do
                 network=$(echo $route|cut -d' ' -f1)
                 gateway=$(echo $route|cut -d' ' -f3)
-                public_routes="${public_routes} ${network}:${gateway}"
-            done <<< "$(cat /etc/sysconfig/network-scripts/route-"$public_interface")"
+                private_routes="${private_routes} ${network}:${gateway}"
+            done <<< "$(cat /etc/sysconfig/network-scripts/route-"$private_interface")"
         fi
     fi
-
+    public_interface=$(get_public_interface);
+    public_routes=""
+    if [ $private_interface != $public_interface ]; then
+        public_mac_address=$(cat /sys/class/net/$public_interface/address)
+        public_mvtap_mac=$(echo "02${public_mac_address:2:15}")
+        public_mtu=$(cat /sys/class/net/$public_interface/mtu)
+        public_ip_address=$(cat /etc/sysconfig/network-scripts/ifcfg-$public_interface|grep IPADDR|cut -d= -f2)
+        if [ ! -z $PORTABLE_PUBLIC_ADDRESS ]; then
+            public_ip_address=$PORTABLE_PUBLIC_ADDRESS
+        else
+            if [ -f /etc/sysconfig/network-scripts/route-$public_interface ]; then
+                while read route; do
+                    network=$(echo $route|cut -d' ' -f1)
+                    gateway=$(echo $route|cut -d' ' -f3)
+                    public_routes="${public_routes} ${network}:${gateway}"
+                done <<< "$(cat /etc/sysconfig/network-scripts/route-"$public_interface")"
+            fi
+        fi
+        public_netmask=$(cat /etc/sysconfig/network-scripts/ifcfg-$public_interface|grep NETMASK|cut -d= -f2)
+        if [ ! -z $PORTABLE_PUBLIC_NETMASK ]; then
+            public_netmask=$PORTABLE_PUBLIC_NETMASK
+        fi
+        public_default_gateway=$(cat /etc/sysconfig/network-scripts/ifcfg-$public_interface|grep GATEWAY|cut -d= -f2)
+        if [ ! -z $PORTABLE_PUBLIC_GATEWAY ]; then
+            public_default_gateway=$PORTABLE_PUBLIC_GATEWAY
+        fi
+    fi
     dnsservers=""
     if [ -f /etc/resolv.conf ]; then
         while read resolv; do
@@ -188,21 +263,23 @@ function create_network_json() {
     echo -n "{ "
     #start links
     echo -n "\"links\": [ "
-    echo -n "{ \"id\": \"private_link\", \"name\": \"${private_interface}\", \"mtu\": \"${private_mtu}\", \"type\": \"phy\", \"ethernet_mac_address\": \"${private_mac_address}\"}"
+    echo -n "{ \"id\": \"management_link\", \"name\": \"veth0\", \"mtu\": \"1500\", \"type\": \"phy\", \"ethernet_mac_address\": \"02:00:00:00:00:01\"},"
+    echo -n "{ \"id\": \"private_link\", \"name\": \"${private_interface}\", \"mtu\": \"${private_mtu}\", \"type\": \"phy\", \"ethernet_mac_address\": \"${private_mvtap_mac}\"}"
     if [ $private_interface != $public_interface ]; then
         echo -n ", "
-        echo -n "{ \"id\": \"public_link\", \"name\": \"${public_interface}\", \"mtu\": \"${public_mtu}\", \"type\": \"phy\", \"ethernet_mac_address\": \"${public_mac_address}\"}"
+        echo -n "{ \"id\": \"public_link\", \"name\": \"${public_interface}\", \"mtu\": \"${public_mtu}\", \"type\": \"phy\", \"ethernet_mac_address\": \"${public_mvtap_mac}\"}"
     fi
     echo -n "], "
     #end links
     #start networks
     echo -n "\"networks\": [ "
+    echo -n "{ \"id\": \"mgmt\", \"link\": \"management_link\", \"type\": \"ipv4_dhcp\"},"
     echo -n "{ \"id\": \"private\", \"link\": \"private_link\", \"type\": \"ipv4\", \"ip_address\": \"${private_ip_address}\", \"netmask\": \"${private_netmask}\", "
     echo -n "\"routes\": ["
     private_route_json=""
-    if [[ ! -z "${private_default_gateway}" ]]; then
-        private_route_json=" { \"network\": \"0.0.0.0\", \"netmask\": \"0.0.0.0\", \"gateway\": \"${private_default_gateway}\" },"
-    fi
+    # if [[ ! -z "${private_default_gateway}" ]]; then
+    #    private_route_json=" { \"network\": \"0.0.0.0\", \"netmask\": \"0.0.0.0\", \"gateway\": \"${private_default_gateway}\" },"
+    # fi
     if [[ ! -z "${private_routes// }" ]]; then
         private_routes=($private_routes)
         for route in "${private_routes[@]}"; do
@@ -260,17 +337,8 @@ function create_network_json() {
     echo " }";
 }
 
-function generate_private_bridge() {
-    cat > /etc/sysconfig/network-scripts/ifcfg-private <<EOF
-DEVICE=private
-TYPE=Bridge
-BOOTPROTO=static
-ONBOOT=yes
-DELAY=0
-NM_CONTROLLED=no
-STP=off
-EOF
-cat >> /etc/sysctl.conf <<EOF
+function configure_bridge_forwarding() {
+    cat >> /etc/sysctl.conf <<EOF
 net.bridge.bridge-nf-call-ip6tables = 0
 net.bridge.bridge-nf-call-iptables = 0
 net.bridge.bridge-nf-call-arptables = 0
@@ -279,38 +347,56 @@ EOF
     /usr/libexec/iptables/iptables.init save
 }
 
-function migrate_private_interface_to_bridge() {
+function migrate_private_interface() {
     private_interface=$(get_private_interface)
-    cp /etc/sysconfig/network-scripts/ifcfg-$private_interface /etc/sysconfig/network-scripts/dist-ifcfg-$private_interface
-    sed -i '/IPADDR/d' /etc/sysconfig/network-scripts/ifcfg-$private_interface
-    sed -i '/NETMASK/d' /etc/sysconfig/network-scripts/ifcfg-$private_interface
-    echo 'BRIDGE=private' >> /etc/sysconfig/network-scripts/ifcfg-$private_interface
-    mv /etc/sysconfig/network-scripts/route-$private_interface /etc/sysconfig/network-scripts/dist-route-$private_interface
+    /usr/bin/cp -f /etc/sysconfig/network-scripts/ifcfg-$private_interface /etc/sysconfig/network-scripts/dist-ifcfg-$private_interface
+    /usr/bin/cp -f /etc/sysconfig/network-scripts/route-$private_interface /etc/sysconfig/network-scripts/dist-route-$private_interface
+    if [ -z $PORTABLE_PRIVATE_ADDRESS ]; then
+        sed -i '/IPADDR/d' /etc/sysconfig/network-scripts/ifcfg-$private_interface
+        sed -i '/NETMASK/d' /etc/sysconfig/network-scripts/ifcfg-$private_interface
+        sed -i '/GATEWAY/d' /etc/sysconfig/network-scripts/ifcfg-$private_interface
+        rm -f /etc/sysconfig/network-scripts/route-$private_interface
+    fi
+    for f in /etc/sysconfig/network-scripts/ifcfg-$private_interface-range*; do
+        mv -f $f /etc/sysconfig/network-scripts/dist-$f
+    done
 }
 
-function generate_public_bridge() {
-    cat > /etc/sysconfig/network-scripts/ifcfg-public <<EOF
-DEVICE=public
-TYPE=Bridge
-BOOTPROTO=static
-ONBOOT=yes
-DELAY=0
-NM_CONTROLLED=no
-STP=off
-EOF
-}
-
-function migrate_public_interface_to_bridge() {
-    private_interface=$(get_private_interface);
+function migrate_public_interface() {
+    private_interface=$(get_private_interface)
     public_interface=$(get_public_interface)
     if [ $private_interface != $public_interface ]; then
-        cp /etc/sysconfig/network-scripts/ifcfg-$public_interface /etc/sysconfig/network-scripts/dist-ifcfg-$public_interface
-        sed -i '/IPADDR/d' /etc/sysconfig/network-scripts/ifcfg-$public_interface
-        sed -i '/NETMASK/d' /etc/sysconfig/network-scripts/ifcfg-$public_interface
-        sed -i '/GATEWAY/d' /etc/sysconfig/network-scripts/ifcfg-$public_interface
-        echo 'BRIDGE=public' >> /etc/sysconfig/network-scripts/ifcfg-$public_interface
-        mv /etc/sysconfig/network-scripts/route-$public_interface /etc/sysconfig/network-scripts/dist-route-$public_interface
+        /usr/bin/cp -f /etc/sysconfig/network-scripts/ifcfg-$public_interface /etc/sysconfig/network-scripts/dist-ifcfg-$public_interface
+        /usr/bin/cp -f /etc/sysconfig/network-scripts/route-$public_interface /etc/sysconfig/network-scripts/dist-route-$public_interface
+        if [ -z $PORTABLE_PUBLIC_ADDRESS ]; then
+            sed -i '/IPADDR/d' /etc/sysconfig/network-scripts/ifcfg-$public_interface
+            sed -i '/NETMASK/d' /etc/sysconfig/network-scripts/ifcfg-$public_interface
+            sed -i '/GATEWAY/d' /etc/sysconfig/network-scripts/ifcfg-$public_interface
+            rm -f /etc/sysconfig/network-scripts/route-$public_interface
+        fi
+        for f in /etc/sysconfig/network-scripts/ifcfg-$public_interface-range*; do
+            mv -f $f /etc/sysconfig/network-scripts/dist-$f
+        done
     fi
+}
+
+function restore_dist_networking() {
+    for f in /etc/sysconfig/network-scripts/dist-*; do
+        fn=$(basename $f)
+        mv -f $f /etc/sysconfig/network-scripts/${fn:5}
+    done
+}
+
+function remove_vm() {
+    hostname=$(hostname)
+    virsh destroy $hostname
+    virsh undefine $hostname
+}
+
+function remove_temp_files() {
+    rm -rf /tmp/config_drive
+    rm -rf /tmp/ve_domain_xml.tmpl
+    rm -rf /var/lib/libvirt/images/config.iso
 }
 
 function create_config_drive() {
@@ -335,6 +421,10 @@ function get_CPU_count() {
     grep -c ^processor /proc/cpuinfo
 }
 
+function get_virtio_queue_count() {
+    echo "2"
+}
+
 function get_memory() {
     memory=`cat /proc/meminfo | grep MemTotal | awk '{print $2}'`
     expr $memory - 2048000
@@ -345,20 +435,33 @@ function setup_ve_host_domain() {
     hostname=$(hostname)
     vcpus=$(get_CPU_count)
     mem=$(get_memory)
+    virtio_queues=$(get_virtio_queue_count);
+    private_interface=$(get_private_interface);
+    private_mac_address=$(cat /sys/class/net/$private_interface/address)
+    private_mvtap_mac=$(echo "02${private_mac_address:2:15}")
+    public_interface=$(get_public_interface);
+    public_mac_address=$(cat /sys/class/net/$public_interface/address)
+    public_mvtap_mac=$(echo "02${public_mac_address:2:15}")
     sed -i -e "s/__HOSTNAME__/$hostname/g" /tmp/ve_domain_xml.tmpl
     sed -i -e "s/__F5_CHASIS_SERIAL_NUMBER__/$systemid/g" /tmp/ve_domain_xml.tmpl
     sed -i -e "s/__VE_RAM__/$mem/g" /tmp/ve_domain_xml.tmpl
     sed -i -e "s/__VE_CPUS__/$vcpus/g" /tmp/ve_domain_xml.tmpl
     sed -i -e "s/__TMOS_VERSION__/13.1.0/g" /tmp/ve_domain_xml.tmpl
+    sed -i -e "s/__PRIVATE_MAC_ADDRESS__/$private_mvtap_mac/g" /tmp/ve_domain_xml.tmpl
+    sed -i -e "s/__PRIVATE_HOST_INTERFACE__/$private_interface/g" /tmp/ve_domain_xml.tmpl
+    sed -i -e "s/__VIRTIO_NIC_QUEUES__/$virtio_queues/g" /tmp/ve_domain_xml.tmpl
+    sed -i -e "s/__PUBLIC_MAC_ADDRESS__/$public_mvtap_mac/g" /tmp/ve_domain_xml.tmpl
+    sed -i -e "s/__PUBLIC_MAC_INTERFACE__/$public_interface/g" /tmp/ve_domain_xml.tmpl
+    sed -i -e "s/__VIRTIO_NIC_QUEUES__/$virtio_queues/g" /tmp/ve_domain_xml.tmpl
     virsh define /tmp/ve_domain_xml.tmpl
     virsh autostart $hostname
 }
 
 function cleanup_and_exit() {
-	rm -rf /tmp/config_drive > /dev/null 2>&1
-	rm -rf /var/lib/libvirt/images/bigipve.qcow2 > /dev/null 2>&1
-	rm -rf /tmp/ve_domain_xml.tmpl > /dev/null 2>&1
-	exit 1
+    rm -rf /tmp/config_drive > /dev/null 2>&1
+    rm -rf /var/lib/libvirt/images/bigipve.qcow2 > /dev/null 2>&1
+    rm -rf /tmp/ve_domain_xml.tmpl > /dev/null 2>&1
+    exit 1
 }
 
 function main() {
@@ -372,12 +475,13 @@ function main() {
     get_ve_domain_template
     echo "######### Getting f5 VE disk image #########"
     get_ve_image
+    echo "######### Adding Host Configurations #########"
+    create_macvtap_scripts
+    configure_bridge_forwarding
     echo "######### Setting up Private Network #########"
-    generate_private_bridge
-    migrate_private_interface_to_bridge
+    migrate_private_interface
     echo "######### Setting up Public Network #########"
-    generate_public_bridge
-    migrate_public_interface_to_bridge
+    migrate_public_interface
     echo "######### Building libvirt VE Domain #########"
     setup_ve_host_domain
     echo "######### Building VE Config Drive #########"
