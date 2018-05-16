@@ -225,8 +225,7 @@ Terminal access
 
 Direct console access to the TMOS Virtual Edition can be obtained by access the Bare Metal host via `ssh`, and then access the virtual console by running the following command:
 
-```virsh console $(hostname)
-```
+``virsh console $(hostname)``
 
 Even with BIG-IP Self IP secured, console level access is maintained from the Bare Metal host.
 
