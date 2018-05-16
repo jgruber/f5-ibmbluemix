@@ -185,6 +185,8 @@ export PORTABLE_PRIVATE_ADDRESS=10.182.41.101
 export PORTABLE_PRIVATE_NETMASK=255.255.255.192
 export PORTABLE_PRIVATE_GATEWAY=10.182.41.65
 
+export TMOS_LICENSE_BASEKEY=GRUB1-KPKXB-PY867-5309O-CMUWAQY
+
 ```
 
 You will need to export these environment variables before executing the script. If these variables are not set, their default values are as follows:
@@ -202,6 +204,7 @@ PORTABLE_PUBLIC_GATEWAY| |No networking will be provisioned
 PORTABLE_PRIVATE_ADDRESS| |No networking will be provisioned
 PORTABLE_PRIVATE_NETMASK| |No networking will be provisioned
 PORTABLE_PRIVATE_GATEWAY| |No networking will be provisioned
+TMOS_LICENSE_BASEKEY| |No license activation will be attempted
 
 ## Running the TMOS Virtual Edition Installation Script
 
