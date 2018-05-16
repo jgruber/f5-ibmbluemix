@@ -111,8 +111,6 @@ ALL_1SLOT | 6.2 GB |60 GB | 100 GB
 
 What this effectively means is that your Virtual Host for all but LTM_1SLOT images must use a CLI or API client to create the Virtual Host with the appropriate disk size.
 
-[[ TO DO DOCUMENT VS CREATE WITH 100G DISK]]
-
 Once the TMOS Virtual Edition is launched and has completed intialization, it will display like any other Virtual Host in the IBM Cloud web portal, CLI, or API. To access the TMOS Virtual Edition simply `ssh` as root to the Virtual host's private IP address or login to the TMOS Web Inteface at `https://[private_ip_address]:8443`.
 
 # Launching TMOS Virtual Edition on a IBM Cloud Bare Metal Host
@@ -121,16 +119,17 @@ The proceedure for creating a TMOS Virtual Edition for Bare Metal installation i
 
 ### Steps Performed When Launching Each TMOS Virutal Edition
 
-1. Order the appropriate CentOS 7.x minimal Bare Metal host
-2. Download your TMOS Virtual Edition QCOW disk image to your Bare Metal host
-3. Download and Customize the TMOS Virtual Edition install script from this repo
-4. Run the TMOS Virtual Edition install script
+1. Order the appropriate CentOS 7.x minimal Bare Metal host with bonded (redundant) network interfaces
+2. Order the appropriate portable subnets for BIG-IP usage
+3. Download your TMOS Virtual Edition QCOW disk image to your Bare Metal host
+4. Download and Customize the TMOS Virtual Edition install script from this repo
+5. Run the TMOS Virtual Edition install script
 
 ## Ordering a Bare Metal Server
 
 The TMOS Virtual Edition install script assume the software packaging tools and packages associated with Red Hat Linux version 7 are available to your Bare Metal host. The installation script was tested with the IBM Cloud Bare Metal CentOS 7.x minimal OS install image.
 
-Bare Metal hosts with `Private and Public` or ` Private Only` networking models have access to download the necessary packages for the high-performance KVM virtual machine manager environment. In addition to the softare install packages, the host must have access to the URLs specified in the installation script to download the TMOS Virtual Edition qcow2 disk image, KVM environment template, and the user_data file template. For `Private Only` networking, these resources can either be hosted on private reachable URLs or can be securely copied to the Bare Metal host and referenced by `file://` URLs.
+Bare Metal hosts with the `Private and Public` networking models have access to download the necessary packages for the high-performance KVM virtual machine manager environment. In addition to the softare install packages, the host must have access to the URLs specified in the installation script to download the TMOS Virtual Edition qcow2 disk image, KVM environment template, and the user_data file template. The `Private Only` networking model is not recommended.
 
 
 ## Obtaining TMOS Virtual Edition QCOW Disk Images
@@ -144,7 +143,7 @@ To determine which TMOS Virtual Edition you will need to properly support the F5
 [Overview of BIG-IP VE image sizes](https://support.f5.com/csp/article/K14946)
 [Overview of BIG-IP VE license and throughput limits](https://support.f5.com/csp/article/K14810)
 
-The KVM domain enviroment to launch your TMOS Virtual Edition has been templated to allow for ease in tuning. Without tuning, the provided KVM domain environment template supports TMOS Virtual Editions up to 5Gbps. This performance will be entirely dependant on the Bare Metal device ordered and should follow the guidlines found here:
+The KVM domain enviroment to launch your TMOS Virtual Edition has been templated to allow for ease in tuning. The template utilizes high-speed paravirtualized network interfaces for speeds in excess of 10Gbps. TMOS Virtual Edition performance will be entirely dependant on the Bare Metal device ordered and should follow the guidlines found here:
 
 [Environmental setup for evaluating performance on the BIG-IP Virtual Edition system](https://support.f5.com/csp/article/K17160)
 
@@ -162,16 +161,30 @@ To obtain the TMOS Virtual Edition installation script file, download the [ibmbm
 
 ``# wget https://raw.githubusercontent.com/jgruber/f5-ibmbluemix/master/baremetal/ibmbm_tmos_ve_install.sh``
 
-Before running the TMOS Virtual Edition installation script, there are settings which determine which TMOS Virtual Edition disk to download, which virtual machine domain XML template to use, which user_data metadata template to use for TMOS resource provisioning, and the built in account passwords to set during installation. Each of these settings are read as environment variables by the TMOS Virtual Edition installation script.
+Before running the TMOS Virtual Edition installation script, there are settings which determine which TMOS Virtual Edition disk to download, which virtual machine deployment template, the orchestration template, built in account passwords to set, and the portal subnet addresses to allocation to the BIG-IP during installation. Each of these settings are read as environment variables by the TMOS Virtual Edition installation script.
+
+For each TMOS Virtual Edition being launched, you will need a private portable IP address, netmask, and gateway as well as a public portable IP address, netmask, and gateway. For TMOS Virtual Editions being clustered into a device service group, the addresses should be from the same portable subnets.
+
+![](./baremetal/topology.png)
 
 An example of exporting the installation script settings environment variables is as follows:
 
 ```
 export TMOS_ADMIN_PASSWORD=ibmsoftlayer
 export TMOS_ROOT_PASSWORD=ibmsoftlayer
+
 export BIGIP_UNZIPPED_QCOW_IMAGE_URL=file:///tmp/BIGIP-13.1.0.3.0.0.5.qcow2
-export TMOS_VE_DOMAIN_TEMPLATE=https://raw.githubusercontent.com/jgruber/f5-ibmbluemix/master/baremetal/ve_domain_standard_xml.tmpl
-export USER_DATA_URL=https://raw.githubusercontent.com/jgruber/f5-ibmbluemix/master/ibm_init_userdata.txt
+export TMOS_VE_DOMAIN_TEMPLATE="https://raw.githubusercontent.com/jgruber/f5-ibmbluemix/master/baremetal/ve_domain_3_nic_virtio_mq_xml.tmpl"
+export USER_DATA_URL="https://raw.githubusercontent.com/jgruber/f5-ibmbluemix/master/baremetal/ibm_init_userdata.txt"
+
+export PORTABLE_PUBLIC_ADDRESS=169.60.155.27
+export PORTABLE_PUBLIC_NETMASK=255.255.255.240
+export PORTABLE_PUBLIC_GATEWAY=169.60.155.19
+
+export PORTABLE_PRIVATE_ADDRESS=10.182.41.101
+export PORTABLE_PRIVATE_NETMASK=255.255.255.192
+export PORTABLE_PRIVATE_GATEWAY=10.182.41.65
+
 ```
 
 You will need to export these environment variables before executing the script. If these variables are not set, their default values are as follows:
@@ -183,8 +196,12 @@ TMOS_ROOT_PASSWORD | ibmsoftlayer | The value to set the TMOS root account passw
 BIGIP_UNZIPPED_QCOW_IMAGE_URL | file:///tmp/BIGIP-13.1.0.3.0.0.5.qcow2 | The URL location of the TMOS Virtual Edition qcow disk image. This can be http://, https://, or file://. Use file:// if you used another tool to download the TMOS Virtual Edition disk image to the bare metal host.
 TMOS_VE_DOMAIN_TEMPLATE | file:///tmp/ve_domain_standard_xml.tmpl | The libvirt domain XML template to use for the TMOS Virtual Edition instance
 USER_DATA_URL| file:///tmp/ibm_init_userdata.txt | The cloud-init user_data metadata template to use for TMOS Virtual Edition provisioning
-
-The TMOS Virtual Edition will check the validity of each of these settings and will exit operation if they are not available or are not of the right format.
+PORTABLE_PUBLIC_ADDRESS| |No networking will be provisioned
+PORTABLE_PUBLIC_NETMASK| |No networking will be provisioned
+PORTABLE_PUBLIC_GATEWAY| |No networking will be provisioned
+PORTABLE_PRIVATE_ADDRESS| |No networking will be provisioned
+PORTABLE_PRIVATE_NETMASK| |No networking will be provisioned
+PORTABLE_PRIVATE_GATEWAY| |No networking will be provisioned
 
 ## Running the TMOS Virtual Edition Installation Script
 
@@ -192,9 +209,26 @@ Once the settings environment variables are exported, execute the TMOS Virtual E
 
 ``# bash ibmbm_tmos_ve_install.sh``
 
-The Bare Metal host will reboot after installation and the network addresses previously allocated to the Bare Metal host by the IBM Cloud provisioning process will now owned by the TMOS Virtual Edition running on the host. The only access to the Bare Metal host operating system will be through the remote console for the Bare Metal host. The Bare Metal host is simply functioning as a compute host for the TMOS Virtual Edition.
+The Bare Metal host will reboot after installation.
 
-To access the TMOS Virtual Edition simply `ssh` as root to the Bare Metal host's private IP address or login to the TMOS Web Inteface at `https://[private_ip_address]:8443`.
+With the use of portable subnets, the Bare Metal host retains all of its originally assigned static network addresses. Access to the Bare Metal host by you or IBM Cloud operations remains unchanged.
+
+By default the provisioning process will set all BIG-IP Self IPs to `allow all`. Once service level provisioning is complete, you will want to secure access to the BIG-IP Self IPs appropriate to their use and access. With the BIG-IP Self IPs allowing all access, the TMOS TMUI Web GUI can be reached on port 443 on either the public or private portable IP addresses provisioned. You can also `ssh` on port 22 to either the public or private portable IP addresses provisioned.
+
+Web GUI access
+
+``https://[portable_ip_address]``
+
+Terminal access
+
+``ssh root@[portable_ip_address]``
+
+Direct console access to the TMOS Virtual Edition can be obtained by access the Bare Metal host via `ssh`, and then access the virtual console by running the following command:
+
+```virsh console $(hostname)
+```
+
+Even with BIG-IP Self IP secured, console level access is maintained from the Bare Metal host.
 
 If at any point in this process you experience difficulty, simply reload the OS for the Bare Metal device and start over.
 
