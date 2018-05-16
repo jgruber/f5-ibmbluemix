@@ -1,278 +1,227 @@
 #cloud-config
 bootcmd:
-  - /usr/bin/setdb dhclient.mgmt disable && echo '*** disabled dhclient'
-  - /usr/bin/setdb provision.1nic forced_enable && echo '*** enabled 1nic'
+  - /usr/bin/setdb dhclient.mgmt disable
+  - /usr/bing/setdb provision.1nicautoconfig value disable
+  - /usr/bin/setdb provision.1nic forced_enable
 
 write_files:
   - path: /config/ibmbluemix_vsi_init.sh
     permissions: 0755
     content: |
-        #!/bin/bash
-        admin_password="__TMOS_ADMIN_PASSWORD__"
-        root_password="__TMOS_ROOT_PASSWORD__"
-        license_basekey="__TMOS_LICENSE_BASEKEY__"
-        function check_mcpd_up() {
-            checks=0
-            while [ $checks -lt 120 ]; do
-                if tmsh -a show sys mcp-state field-fmt 2> /dev/null | grep -q running; then
-                    break
-                fi
-                let checks=checks+1
-                sleep 10
-            done
-        }
-        function setup_init() {
-            check_mcpd_up
-        }
-        function setup_passwords() {
-            /usr/bin/passwd admin $admin_password >/dev/null 2>&1
-            /usr/bin/passwd root $root_password >/dev/null 2>&1
-        }
-        function mount_config_drive() {
-            configDriveSrc=$(blkid -t LABEL="config-2" -odevice)
-            if [[ ! -z $configDriveSrc ]]
-            then
-                mounted=$(cat /proc/mounts | grep $configDriveSrc | wc -l)
-                if [[ $mounted == 0 ]]
-                then
-                    configDriveDest="/mnt/config"
-                    mkdir -p $configDriveDest
-                    mount "$configDriveSrc" $configDriveDest >/dev/null 2>&1
-                fi
-            fi
-        }
-        function mgmt_setup() {
-            mount_config_drive
-            /usr/bin/python - << EOF
-        import os, json, subprocess
-        nmd = json.load(open('/mnt/config/openstack/latest/network_data.json'))
-        for n in nmd['networks']:
-            if n['link'] == nmd['links'][0]['id']:
-                if (not n['type'] == 'ipv4_dhcp') and (not n['type'] == 'ipv6_dhcp'):
-                    mgmtaddr = "%s/%s" % (n['ip_address'], n['netmask'])
-                    subprocess.call(['/sbin/ip', 'addr', 'add', mgmtaddr, 'dev', 'mgmt'])
-                    subprocess.call(['/sbin/ip', 'link', 'set', 'mgmt', 'up'])
-        EOF
-        }
-        function setup_host() {
-            mount_config_drive
-            /usr/bin/python - << EOF
-        import json
-        md = json.load(open('/mnt/config/openstack/latest/meta_data.json'))
-        for k in md['public_keys']:
-            with open('/root/.ssh/authorized_keys', 'a') as ak:
-                ak.write(md['public_keys'][k] + '\n')
-        with open('/config/host_setup.sh','w') as hs:
-            hs.write("#!/bin/bash\n")
-            hs.write("tmsh modify sys global-settings hostname %s\n" % md['hostname'])
-            hs.write("tmsh delete cm trust-domain all\n")
-            hs.write("tmsh mv cm device bigip1 %s\n" % md['hostname'])
-            hs.write("tmsh modify sys global-settings gui-setup disabled\n")
-        EOF
-            chmod +x /config/host_setup.sh
-            /config/host_setup.sh
-        }
-        function setup_networking() {
-            mount_config_drive
-            /usr/bin/python - << EOF
-        import os, json, subprocess
-        nmd = json.load(open('/mnt/config/openstack/latest/network_data.json'))
-        md = json.load(open('/mnt/config/openstack/latest/meta_data.json'))
-        onenic = False
-        fnull = open(os.devnull, 'w')
-        is_1nic = subprocess.call(['/usr/bin/tmsh', 'list', 'net', 'interface', '1.0'], stdout=fnull)
-        if is_1nic == 0:
-            onenic = True
-        with open('/config/network_setup.sh','w') as ns:
-            ns.write("#!/bin/bash\n")
+      #!/bin/bash
+      admin_password="__TMOS_ADMIN_PASSWORD__"
+      root_password="__TMOS_ROOT_PASSWORD__"
+      license_basekey="__TMOS_LICENSE_BASEKEY__"
+      portable_selfip="__PORTABLE_SUBNET_SELFIP__"
+      portable_netmask="__PORTABLE_SUBNET_NETMASK__"
+      portable_gateway="__PORTABLE_SUBNET_GATEWAY__"
+      source /config/onboard_functions.sh
+      function main() {
+          echo -n "initialization started at: "; date
+          SECONDS=0
+          setup_passwords
+          setup_init
+          setup_static_management_interface
+          setup_host
+          setup_networking
+          setup_portable_config
+          setup_configsync
+          setup_license
+          setup_cleanup
+          duration=$SECONDS
+          echo "$(($duration / 60)) minutes and $(($duration % 60)) seconds elapsed."
+          echo -n "initialization complete at: "; date
+      }
+      main
+  - path: /config/onboard_functions.sh
+    permissions: 0755
+    content: |
+      function check_mcpd_up(){ checks=0;while [ $checks -lt 120 ];do if tmsh -a show sys mcp-state field-fmt 2>/dev/null|grep -q running;then break;fi;let checks=checks+1;sleep 10;done;};function setup_init(){ echo "initializing setup";mount_config_drive;check_mcpd_up;};function setup_passwords(){ echo "changing well known account passwords";if [[ -n $admin_password ]];then /usr/bin/passwd admin $admin_password>/dev/null 2>&1;fi;if [[ -n $root_password ]];then /usr/bin/passwd root $root_password>/dev/null 2>&1;fi;};function mount_config_drive(){ configDriveSrc=$(blkid -t LABEL="config-2" -odevice);if [[ ! -z $configDriveSrc ]];then mounted=$(cat /proc/mounts|grep $configDriveSrc|wc -l);if [[ $mounted == 0 ]];then configDriveDest="/mnt/config";mkdir -p $configDriveDest;mount "$configDriveSrc" $configDriveDest>/dev/null 2>&1;fi;fi;};function setup_static_management_interface(){ echo "configuring management interface statically";if [ -f /config/static_management_setup.py ];then /usr/bin/python /config/static_management_setup.py;fi;if [ -f /config/static_management_setup.sh ];then /bin/bash /config/static_management_setup.sh;fi;};function setup_host(){ echo "setting up host configurations";if [ -f /config/host_setup.py ];then /usr/bin/python /config/host_setup.py;fi;if [ -f /config/host_setup.sh ];then /bin/bash /config/host_setup.sh;fi;};function setup_networking(){ echo "setting up network configurations";if [ -f /config/network_setup.py ];then /usr/bin/python /config/network_setup.py;fi;if [ -f /config/network_setup.sh ];then /bin/bash /config/network_setup.sh;fi;};function setup_portable_config(){ if [[ -n $portable_selfip ]];then echo "setting up portable subnet access";tmsh save sys config;tmsh modify sys db provision.1nic value forced_disable;tmsh delete net route default;tmsh modify sys global-settings mgmt-dhcp disabled;tmsh delete sys management-route default;tmsh delete sys management-ip all;tmsh create sys management-ip 169.254.1.2/255.255.0.0;tmsh save sys config;bigstart restart;check_mcpd_up;tmsh create net self self_portable { address $portable_selfip/$portable_netmask allow-service default vlan internal };tmsh create net route default network default gw $portable_gateway;fi;};function setup_configsync(){ echo "setting device config sync";if ! [[ -n $portable_selfip ]];then if [ -f /config/configsync_setup.sh ];then chmod +x /config/configsync_setup.sh;/config/configsync_setup.sh;fi;else tmsh show net self self_portable>/dev/null 2>&1;while [ $? -ne 0 ];do sleep 2;tmsh show net self self_portable>/dev/null 2>&1;done;dn=$(tmsh list cm device one-line|cut -d' ' -f3);tmsh modify cm device $dn configsync-ip $portable_selfip unicast-address { { effective-ip $portable_selfip effective-port 1026 ip $portable_selfip } } mirror-ip $portable_selfip;fi;};function setup_license(){ if [[ -n $license_basekey ]];then echo "licensing BIG-IP using license key $license_basekey...";/usr/local/bin/SOAPLicenseClient --basekey $license_basekey>/dev/null 2>&1;fi;};function setup_cleanup(){ echo "cleaning up setup";umount /mnt/config>/dev/null 2>&1;mtu=`cat /sys/class/net/mgmt/mtu`;ip link set eth0 mtu 1500;ip link set mgmt mtu 1500;tmsh save sys config;check_mcpd_up;ip link set mgmt mtu $mtu;}
+  - path: /config/static_management_setup.py
+    permissions: 0755
+    content: |
+      #!/bin/env python
+      import json, subprocess
+      nmd = json.load(open('/mnt/config/openstack/latest/network_data.json'))
+      for n in nmd['networks']:
+       if n['link'] == nmd['links'][0]['id']:
+        if (not n['type'] == 'ipv4_dhcp') and (not n['type'] == 'ipv6_dhcp'):
+         mgmtaddr = "%s/%s" % (n['ip_address'], n['netmask'])
+         subprocess.call(['/sbin/ip', 'addr', 'add', mgmtaddr, 'dev', 'mgmt'])
+         subprocess.call(['/sbin/ip', 'link', 'set', 'mgmt', 'up'])
+  - path: /config/host_setup.py
+    permissions: 0755
+    content: |
+      #!/bin/env python
+      import json,subprocess
+      md=json.load(open('/mnt/config/openstack/latest/meta_data.json'))
+      for k in md['public_keys']:
+       with open('/root/.ssh/authorized_keys','a')as ak:
+        ak.write(md['public_keys'][k]+'\n')
+      with open('/config/host_setup.sh','w')as hs:
+       subprocess.call(['tmsh','modify','sys','global-settings','hostname',md['hostname']])
+       subprocess.call(['tmsh','delete','cm','trust-domain','all'])
+       subprocess.call(['tmsh','mv','cm','device','bigip1',md['hostname']])
+       subprocess.call(['tmsh','modify','sys','global-settings','gui-setup','disabled'])
+  - path: /config/network_setup.py
+    permissions: 0755
+    content: |
+      #!/bin/env/python
+      import os,json,subprocess
+      nmd=json.load(open('/mnt/config/openstack/latest/network_data.json'))
+      md=json.load(open('/mnt/config/openstack/latest/meta_data.json'))
+      onenic=False
+      fnull=open(os.devnull,'w')
+      is_1nic=subprocess.call(['/usr/bin/tmsh','list','net','interface','1.0'],stdout=fnull)
+      if is_1nic==0:
+       onenic=True
+      with open('/config/network_setup.sh','w')as ns:
+       ns.write("#!/bin/bash\n")
+       if onenic:
+        ns.write("tmsh modify sys httpd ssl-port 8443\n")
+        ns.write("tmsh modify net self-allow defaults add { tcp:8443 }\n")
+       ln_types=['phy','bridge','ovs','vif','tap']
+       n_types=['ipv4','ipv6']
+       d_gw=m_dhcp=False
+       m_l_id=m_ip=m_nm=m_gw=None
+       m_l_mtu=1500
+       links,selfips,routes={},{},{}
+       n_idx=0
+       for l in nmd['links']:
+        if not l['mtu']:
+         l['mtu']=1500
+        if n_idx==0:
+         m_l_id=l['id']
+         m_l_mtu=l['mtu']
+         n_idx+=1
+         continue
+        if l['type']in ln_types:
+         links[l['id']]={'net_name':'net_1_%s'%n_idx,'mtu':l['mtu'],'interface':'1.%s'%n_idx,'interface_index':n_idx,'segmentation_id':4094-n_idx,'tagged':False,'route_domain':0}
+         n_idx+=1
+       for l in nmd['links']:
+        if l['type']=='vlan':
+         if l['vlan_link']not in links:
+          print "VLAN %s defined for unsupported link %s"%(l['vlan_id'],l['vlan_link'])
+         else:
+          if not onenic and links[l['vlan_link']]['interface_index']==0:
+           print "VLAN tagging is not supported on management interface"
+          else:
+           links[l['id']]={'net_name':'vlan_%s'%l['vlan_id'],'mtu':links[l['vlan_link']]['mtu'],'interface':links[l['vlan_link']]['interface'],'interface_index':links[l['vlan_link']]['interface_index'],'segmentation_id':l['vlan_id'],'tagged':True,'route_domain':0}
+       for n in nmd['networks']:
+        if n['link']==m_l_id:
+         if n['type']=='ipv4_dhcp' or n['type']=='ipv6_dhcp':
+          m_ip=subprocess.Popen("egrep -m 1 -A 1 mgmt /var/lib/dhclient/dhclient.leases | grep fixed-address | cut -d' ' -f4 | tr -d ';\n'",stdout=subprocess.PIPE,shell=True).communicate()[0]
+          m_nm=subprocess.Popen("egrep -m 1 -A 2 mgmt /var/lib/dhclient/dhclient.leases | grep subnet-mask | cut -d' ' -f5 | tr -d ';\n'",stdout=subprocess.PIPE,shell=True).communicate()[0]
+          m_dhcp=True
+        if n['type']in n_types:
+         for r in n['routes']:
+          if d_gw:
+           for l in links:
+            links[l]['route_domain']=links[l]['segmentation_id']
+          if r['network']=='0.0.0.0' or r['network']=='::':
+           if n['link']==m_l_id:
+            m_gw=r['gateway']
             if onenic:
-                ns.write("tmsh modify sys httpd ssl-port 8443\n")
-                ns.write("tmsh modify net self-allow defaults add { tcp:8443 }\n")
-            ln_types = ['phy', 'bridge', 'ovs', 'vif', 'tap']
-            n_types = ['ipv4', 'ipv6']
-            d_gw = m_dhcp = False
-            m_l_id = m_ip = m_nm = m_gw = None
-            links, selfips, routes = {},{},{}
-            n_idx = 0
-            for l in nmd['links']:
-                if not l['mtu']:
-                    l['mtu'] = 1500
-                if n_idx == 0:
-                    m_l_id = l['id']
-                    n_idx += 1
-                    continue
-                if l['type'] in ln_types:
-                    links[l['id']] = { 'net_name': 'net_1_%s' % n_idx, 'mtu': l['mtu'], 'interface': '1.%s' % n_idx, 'interface_index': n_idx, 'segmentation_id': 4094 - n_idx, 'tagged': False, 'route_domain': 0 }
-                n_idx += 1
-            for l in nmd['links']:
-                if l['type'] == 'vlan':
-                    if l['vlan_link'] not in links:
-                        print "VLAN %s defined for unsupported link %s" % (
-                            l['vlan_id'], l['vlan_link'])
-                    else:
-                        if not onenic and links[l['vlan_link']]['interface_index'] == 0:
-                            print "VLAN tagging is not supported on management interface"
-                        else:
-                            links[l['id']] = { 'net_name': 'vlan_%s' % l['vlan_id'], 'mtu': links[l['vlan_link']]['mtu'], 'interface': links[l['vlan_link']]['interface'], 'interface_index': links[l['vlan_link']]['interface_index'], 'segmentation_id': l['vlan_id'], 'tagged': True, 'route_domain': 0 }
-            for n in nmd['networks']:
-                if n['link'] == m_l_id:
-                    if n['type'] == 'ipv4_dhcp' or n['type'] == 'ipv6_dhcp':
-                        m_ip = subprocess.Popen("egrep -m 1 -A 1 mgmt /var/lib/dhclient/dhclient.leases | grep fixed-address | cut -d' ' -f4 | tr -d ';\n'", stdout=subprocess.PIPE, shell=True).communicate()[0]
-                        m_nm = subprocess.Popen("egrep -m 1 -A 2 mgmt /var/lib/dhclient/dhclient.leases | grep subnet-mask | cut -d' ' -f5 | tr -d ';\n'", stdout=subprocess.PIPE, shell=True).communicate()[0]
-                        m_dhcp = True
-                if n['type'] in n_types:
-                    for r in n['routes']:
-                        if d_gw:
-                            for l in links:
-                                links[l]['route_domain'] = links[l]['segmentation_id']
-                        if r['network'] == '0.0.0.0' or r['network'] == '::':
-                            if n['link'] == m_l_id:
-                                m_gw = r['gateway']
-                                if onenic:
-                                    d_gw = True
-                                continue
-                            elif n['link'] in links:
-                                d_gw = True
-                    for r in n['routes']:
-                        if n['link'] in links:
-                            r['route_domain'] = links[n['link']]['route_domain']
-                            r['route_name'] = "route_%s" % r['network'].replace('.', '_').replace(':', '_').replace('/', '_')
-                            if n['id'] not in routes:
-                                routes[n['id']] = []
-                            if r['network'] == '0.0.0.0' or r['network'] == '::':
-                                if r['gateway'] != m_gw:
-                                    routes[n['id']].append(r)
-                            else:
-                                routes[n['id']].append(r)
-                    if n['link'] in links:
-                        netmask = None
-                        if 'netmask' in n:
-                            netmask = n['netmask']
-                        if not n['link'] == m_l_id:
-                            selfips[n['id']] = { 'selfip_name': 'selfip_%s' % n['link'], 'net_name': links[n['link']]['net_name'], 'ip_address': n['ip_address'], 'netmask': netmask, 'route_domain':  links[n['link']]['route_domain'] }
-                    if n['link'] == m_l_id:
-                        m_ip = n['ip_address']
-                        if 'netmask' in n:
-                            m_nm = n['netmask']
-            if not m_dhcp:
-                ns.write("tmsh modify sys global-settings mgmt-dhcp disabled\n")
-                if onenic:
-                    ns.write("tmsh create sys management-ip %s/%s\n" % (m_ip, m_nm))
-                    ns.write("tmsh create net vlan internal { interfaces replace-all-with { 1.0 { } } tag 4094 }\n")
-                    ns.write("tmsh create net self self_1nic { address %s/%s allow-service default vlan internal }\n" % (m_ip, m_nm))
-                    if m_gw:
-                        ns.write("tmsh create sys management-route default gateway %s\n" % m_gw)
-                        ns.write("tmsh create net route default network default gw %s\n" % m_gw)
-                else:
-                    ns.write("sleep 10\n")
-                    if m_nm:
-                        ns.write("tmsh create sys management-ip %s/%s\n" % (m_ip, m_nm))
-                    else:
-                        ns.write("tmsh create sys management-ip %s\n" % m_ip)
-                    if m_gw:
-                        ns.write("tmsh create sys management-route default gateway %s\n" % m_gw)
-                    ns.write("ip link set mgmt mtu %s\n" % links[m_l_id]['mtu'])
-                    ns.write("echo 'ip link set mgmt mtu %s' > /config/startup\n" % links[m_l_id]['mtu'])
-            if onenic:
-                with open('/config/configsync_setup.sh','w') as cs:
-                    cs.write("tmsh show net self self_1nic > /dev/null 2>&1; while [ \$? -ne 0 ]; do sleep 2; tmsh show net self self_1nic > /dev/null 2>&1; done\n")
-                    cs.write("tmsh modify /sys db configsync.allowmanagement value enable\n")
-                    cs.write("tmsh modify cm device %s configsync-ip %s unicast-address { { effective-ip %s effective-port 1026 ip %s } }\n" % (md['hostname'], m_ip, m_ip, m_ip))
-            for l_id in links:
-                l = links[l_id]
-                if l_id == m_l_id:
-                    continue
-                if not l['tagged']:
-                    ns.write("tmsh create net vlan %s mtu %s interfaces replace-all-with { %s } tag %s\n" % (l['net_name'], l['mtu'], l['interface'], l['segmentation_id']))
-                else:
-                    ns.write("tmsh create net vlan %s mtu %s interfaces replace-all-with { %s { tagged } } tag %s\n" % (l['net_name'], l['mtu'], l['interface'], l['segmentation_id']))
-                if l['route_domain'] > 0:
-                    ns.write("tmsh create net route-domain %s { id %s vlans add { %s } }\n" % (l['route_domain'], l['route_domain'], l['net_name']) )
-            for n_id in selfips:
-                s = selfips[n_id]
-                sip = s['ip_address']
-                snm = None
-                if s['netmask']:
-                    snm = s['netmask']
-                else:
-                    ap = s['ip_address'].split('/')
-                    sip = ap[0]
-                    snm = ap[1]
-                ns.write("tmsh create net self %s address %s%%%s/%s vlan %s allow-service all\n" % (s['selfip_name'], sip, s['route_domain'], snm, s['net_name']))
-                if (not onenic) and (links[n_id]['interface'] == '1.1'):
-                    with open('/config/configsync_setup.sh','w') as cs:
-                        cs.write("tmsh show net self %s > /dev/null 2>&1; while [ \$? -ne 0 ]; do sleep 2; tmsh show net self %s > /dev/null 2>&1; done\n" % (s['selfip_name'], s['selfip_name']))
-                        cs.write("tmsh modify cm device %s configsync-ip %s unicast-address { { effective-ip %s effective-port 1026 ip %s } } mirror-ip %s\n" % (md['hostname'], sip, sip, sip, sip))
-            for n_id in routes:
-                for r in routes[n_id]:
-                    if r['network'] == '0.0.0.0' or r['network'] == '::':
-                        if r['route_domain'] > 0:
-                            ns.write("tmsh create net route default_%s network default%%%s gw %s%%%s\n" % (r['route_domain'], r['route_domain'], r['gateway'], r['route_domain']))
-                        else:
-                            ns.write("tmsh create net route default network default gw %s%%%s\n" % (r['gateway'], r['route_domain']))
-                    else:
-                        if 'netmask' in r:
-                            ns.write("tmsh create net route %s_%s network %s%%%s/%s gw %s%%%s\n" % (r['route_name'], r['route_domain'], r['network'], r['route_domain'], r['netmask'], r['gateway'], r['route_domain']))
-                        else:
-                            rp = r['network'].slit('/')
-                            ns.write("tmsh create net route %s_%s network %s%%%s/%s gw %s%%%s\n" % (r['route_name'], r['route_domain'], rp[0], r['route_domain'], rp[1], r['gateway'], r['route_domain']))
-            ds = []
-            ts = []
-            for service in nmd['services']:
-                if service['type'] == 'dns':
-                    ds.append(service['address'])
-                if service['type'] == 'ntp':
-                    ns.append(service['address'])
-            if ds:
-                ns.write("tmsh modify sys dns name-servers replace-all-with { %s }\n" % " ".join(ds))
-            if not ts:
-                ts.append("10.0.77.54")
-            ns.write("tmsh modify sys ntp servers replace-all-with { %s }\n" % " ".join(ts))
-        EOF
-            chmod +x /config/network_setup.sh
-            /config/network_setup.sh
-        }
-        function setup_cleanup() {
-            umount /mnt/config >/dev/null 2>&1
-            mtu=`cat /sys/class/net/mgmt/mtu`
-            ip link set eth0 mtu 1500
-            ip link set mgmt mtu 1500
-            tmsh save sys config
-            check_mcpd_up
-            ip link set mgmt mtu $mtu
-        }
-        function setup_configsync() {
-            if [ -f /config/configsync_setup.sh ]; then
-               chmod +x /config/configsync_setup.sh
-               /config/configsync_setup.sh
-            fi
-        }
-        function setup_license() {
-            echo "licensing BIG-IP using license key $license_basekey..."
-            /usr/local/bin/SOAPLicenseClient --basekey $license_basekey >/dev/null 2>&1
-        }
-        function main() {
-            echo -n "initialization started at: "; date
-            SECONDS=0
-            echo "changing well known account passwords"
-            setup_passwords
-            echo "configuring mgmt interface"
-            mgmt_setup
-            echo "checking system is ready"
-            setup_init
-            echo "provisioning device settings from cloud-init metadata"
-            setup_host
-            echo "provisioning networking from cloud-init network metadata"
-            setup_networking
-            echo "setting device config sync"
-            setup_configsync
-            echo "saving system configuration"
-            setup_cleanup
-            setup_license
-            duration=$SECONDS
-            echo "$(($duration / 60)) minutes and $(($duration % 60)) seconds elapsed."
-            echo -n "initialization complete at: "; date
-        }
-        main
+             d_gw=True
+            continue
+           elif n['link']in links:
+            d_gw=True
+         for r in n['routes']:
+          if n['link']in links:
+           r['route_domain']=links[n['link']]['route_domain']
+           r['route_name']="route_%s"%r['network'].replace('.','_').replace(':','_').replace('/','_')
+           if n['id']not in routes:
+            routes[n['id']]=[]
+           if r['network']=='0.0.0.0' or r['network']=='::':
+            if r['gateway']!=m_gw:
+             routes[n['id']].append(r)
+           else:
+            routes[n['id']].append(r)
+         if n['link']in links:
+          netmask=None
+          if 'netmask' in n:
+           netmask=n['netmask']
+          if not n['link']==m_l_id:
+           selfips[n['id']]={'selfip_name':'selfip_%s'%n['link'],'net_name':links[n['link']]['net_name'],'ip_address':n['ip_address'],'netmask':netmask,'route_domain':links[n['link']]['route_domain']}
+         if n['link']==m_l_id:
+          m_ip=n['ip_address']
+          if 'netmask' in n:
+           m_nm=n['netmask']
+       if not m_dhcp:
+        ns.write("tmsh modify sys global-settings mgmt-dhcp disabled\n")
+        if onenic:
+         ns.write("tmsh create sys management-ip %s/%s\n"%(m_ip,m_nm))
+         ns.write("tmsh create net vlan internal { interfaces replace-all-with { 1.0 { } } tag 4094 }\n")
+         ns.write("tmsh create net self self_1nic { address %s/%s allow-service default vlan internal }\n"%(m_ip,m_nm))
+         if m_gw:
+          ns.write("tmsh create sys management-route default gateway %s\n"%m_gw)
+          ns.write("tmsh create net route default network default gw %s\n"%m_gw)
+        else:
+         ns.write("sleep 10\n")
+         if m_nm:
+          ns.write("tmsh create sys management-ip %s/%s\n"%(m_ip,m_nm))
+         else:
+          ns.write("tmsh create sys management-ip %s\n"%m_ip)
+         if m_gw:
+          ns.write("tmsh create sys management-route default gateway %s\n"%m_gw)
+         ns.write("ip link set mgmt mtu %s\n"%m_l_mtu)
+         ns.write("echo 'ip link set mgmt mtu %s' > /config/startup\n"%m_l_mtu)
+       if onenic:
+        with open('/config/configsync_setup.sh','w')as cs:
+         cs.write("tmsh show net self self_1nic > /dev/null 2>&1; while [ $? -ne 0 ]; do sleep 2; tmsh show net self self_1nic > /dev/null 2>&1; done\n")
+         cs.write("tmsh modify /sys db configsync.allowmanagement value enable\n")
+         cs.write("tmsh modify cm device %s configsync-ip %s unicast-address { { effective-ip %s effective-port 1026 ip %s } }\n"%(md['hostname'],m_ip,m_ip,m_ip))
+       for l_id in links:
+        l=links[l_id]
+        if l_id==m_l_id:
+         continue
+        if not l['tagged']:
+         ns.write("tmsh create net vlan %s mtu %s interfaces replace-all-with { %s } tag %s\n"%(l['net_name'],l['mtu'],l['interface'],l['segmentation_id']))
+        else:
+         ns.write("tmsh create net vlan %s mtu %s interfaces replace-all-with { %s { tagged } } tag %s\n"%(l['net_name'],l['mtu'],l['interface'],l['segmentation_id']))
+        if l['route_domain']>0:
+         ns.write("tmsh create net route-domain %s { id %s vlans add { %s } }\n"%(l['route_domain'],l['route_domain'],l['net_name']))
+       for n_id in selfips:
+        s=selfips[n_id]
+        sip=s['ip_address']
+        snm=None
+        if s['netmask']:
+         snm=s['netmask']
+        else:
+         ap=s['ip_address'].split('/')
+         sip=ap[0]
+         snm=ap[1]
+        ns.write("tmsh create net self %s address %s%%%s/%s vlan %s allow-service all\n"%(s['selfip_name'],sip,s['route_domain'],snm,s['net_name']))
+       if(not onenic):
+        for l in links:
+         if(links[l]['interface']=='1.1'):
+          with open('/config/configsync_setup.sh','w')as cs:
+           cs.write("tmsh show net self %s > /dev/null 2>&1; while [ $? -ne 0 ]; do sleep 2; tmsh show net self %s > /dev/null 2>&1; done\n"%(s['selfip_name'],s['selfip_name']))
+           cs.write("tmsh modify cm device %s configsync-ip %s unicast-address { { effective-ip %s effective-port 1026 ip %s } } mirror-ip %s\n"%(md['hostname'],sip,sip,sip,sip))
+       for n_id in routes:
+        for r in routes[n_id]:
+         if r['network']=='0.0.0.0' or r['network']=='::':
+          if r['route_domain']>0:
+           ns.write("tmsh create net route default_%s network default%%%s gw %s%%%s\n"%(r['route_domain'],r['route_domain'],r['gateway'],r['route_domain']))
+          else:
+           ns.write("tmsh create net route default network default gw %s%%%s\n"%(r['gateway'],r['route_domain']))
+         else:
+          if 'netmask' in r:
+           ns.write("tmsh create net route %s_%s network %s%%%s/%s gw %s%%%s\n"%(r['route_name'],r['route_domain'],r['network'],r['route_domain'],r['netmask'],r['gateway'],r['route_domain']))
+          else:
+           rp=r['network'].slit('/')
+           ns.write("tmsh create net route %s_%s network %s%%%s/%s gw %s%%%s\n"%(r['route_name'],r['route_domain'],rp[0],r['route_domain'],rp[1],r['gateway'],r['route_domain']))
+       ds=[]
+       ts=[]
+       for service in nmd['services']:
+        if service['type']=='dns':
+         ds.append(service['address'])
+        if service['type']=='ntp':
+         ns.append(service['address'])
+       if ds:
+        ns.write("tmsh modify sys dns name-servers replace-all-with { %s }\n"%" ".join(ds))
+       if not ts:
+        ts.append("10.0.77.54")
+       ns.write("tmsh modify sys ntp servers replace-all-with { %s }\n"%" ".join(ts))
 
 runcmd: [nohup sh -c '/config/ibmbluemix_vsi_init.sh' >> /var/log/ibm-tmos-init.log &]
