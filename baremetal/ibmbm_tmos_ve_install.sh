@@ -24,7 +24,7 @@
 [[ -z $PORTABLE_PUBLIC_GATEWAY ]] && PORTABLE_PUBLIC_GATEWAY=""
 
 [[ -z $TMOS_LICENSE_BASEKEY ]] && TMOS_LICENSE_BASEKEY=""
-[[ -z $TMOS_AS3_URL ]] && TMOS_AS3_URL="rpm -i https://github.com/F5Networks/f5-appsvcs-extension/releases/download/3.0.0/f5-appsvcs-3.0.0-34.noarch.rpm"
+[[ -z $TMOS_AS3_URL ]] && TMOS_AS3_URL="https://github.com/F5Networks/f5-appsvcs-extension/releases/download/3.0.0/f5-appsvcs-3.0.0-34.noarch.rpm"
 
 #### End Settings ####
 

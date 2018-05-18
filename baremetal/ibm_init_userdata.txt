@@ -1,11 +1,12 @@
 #cloud-config
 bootcmd:
   - /usr/bin/setdb dhclient.mgmt disable
-  - /usr/bing/setdb provision.1nicautoconfig value disable
+  - /usr/bin/setdb provision.extramb 500
+  - /usr/bing/setdb provision.1nicautoconfig disable
   - /usr/bin/setdb provision.1nic forced_disabled
 
 write_files:
-  - path: /config/ibmbluemix_vsi_init.sh
+  - path: /config/onboard.sh
     permissions: 0755
     content: |
       #!/bin/bash
@@ -15,6 +16,7 @@ write_files:
       portable_selfip=""
       portable_netmask=""
       portable_gateway=""
+      as3_url="__TMOS_AS3_URL__"
       source /config/onboard_functions.sh
       function main() {
           echo -n "initialization started at: "; date
@@ -28,6 +30,8 @@ write_files:
           setup_configsync
           setup_license
           setup_cleanup
+          mkdir -p /var/config/rest/iapps && touch $_/enable
+          rpm -i $as3_url
           duration=$SECONDS
           echo "$(($duration / 60)) minutes and $(($duration % 60)) seconds elapsed."
           echo -n "initialization complete at: "; date
@@ -63,6 +67,8 @@ write_files:
        subprocess.call(['tmsh','delete','cm','trust-domain','all'])
        subprocess.call(['tmsh','mv','cm','device','bigip1',md['hostname']])
        subprocess.call(['tmsh','modify','sys','global-settings','gui-setup','disabled'])
+       subprocess.call(['touch', '/var/config/rest/iapps/enable'])
+       subprocess.call(['rpm', '-i', '__TMOS_AS3_URL__'])
   - path: /config/network_setup.py
     permissions: 0755
     content: |
@@ -224,4 +230,4 @@ write_files:
         ts.append("10.0.77.54")
        ns.write("tmsh modify sys ntp servers replace-all-with { %s }\n"%" ".join(ts))
 
-runcmd: [nohup sh -c '/config/ibmbluemix_vsi_init.sh' >> /var/log/ibm-tmos-init.log &]
+runcmd: [nohup sh -c '/config/onboard.sh' >> /var/log/onboard.log &]
