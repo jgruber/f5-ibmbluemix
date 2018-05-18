@@ -24,6 +24,7 @@
 [[ -z $PORTABLE_PUBLIC_GATEWAY ]] && PORTABLE_PUBLIC_GATEWAY=""
 
 [[ -z $TMOS_LICENSE_BASEKEY ]] && TMOS_LICENSE_BASEKEY=""
+[[ -z $TMOS_AS3_URL ]] && TMOS_AS3_URL="rpm -i https://github.com/F5Networks/f5-appsvcs-extension/releases/download/3.0.0/f5-appsvcs-3.0.0-34.noarch.rpm"
 
 #### End Settings ####
 
@@ -76,6 +77,7 @@ function get_config_drive_template() {
     sed -i -e "s/__TMOS_ADMIN_PASSWORD__/$TMOS_ADMIN_PASSWORD/g" /tmp/config_drive/openstack/latest/user_data
     sed -i -e "s/__TMOS_ROOT_PASSWORD__/$TMOS_ROOT_PASSWORD/g" /tmp/config_drive/openstack/latest/user_data
     sed -i -e "s/__TMOS_LICENSE_BASEKEY__/$TMOS_LICENSE_BASEKEY/g" /tmp/config_drive/openstack/latest/user_data
+    sed -i -e "s/__TMOS_AS3_URL__/$TMOS_AS3_URL/g" /tmp/config_drive/openstack/latest/user_data
 }
 
 function get_ve_domain_template() {
