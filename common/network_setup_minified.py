@@ -1,72 +1,3 @@
-#cloud-config
-bootcmd:
-  - /usr/bin/setdb dhclient.mgmt disable
-  - /usr/bin/setdb provision.extramb 500
-  - /usr/bing/setdb provision.1nicautoconfig disable
-  - /usr/bin/setdb provision.1nic forced_disabled
-
-write_files:
-  - path: /config/onboard.sh
-    permissions: 0755
-    content: |
-      #!/bin/bash
-      admin_password="__TMOS_ADMIN_PASSWORD__"
-      root_password="__TMOS_ROOT_PASSWORD__"
-      license_basekey="__TMOS_LICENSE_BASEKEY__"
-      as3_url="__TMOS_AS3_URL__"
-      source /config/onboard_functions.sh
-      function main() {
-          echo -n "initialization started at: "; date
-          SECONDS=0
-          setup_passwords
-          setup_init
-          setup_static_management_interface
-          setup_host
-          setup_networking
-          setup_services
-          setup_configsync
-          setup_license
-          setup_cleanup
-          mkdir -p /var/config/rest/iapps && touch $_/enable
-          install_rpm "$as3_url"
-          duration=$SECONDS
-          echo "$(($duration / 60)) minutes and $(($duration % 60)) seconds elapsed."
-          echo -n "initialization complete at: "; date
-      }
-      main
-  - path: /config/onboard_functions.sh
-    permissions: 0755
-    content: |
-      function check_mcpd_up(){ checks=0;while [ $checks -lt 120 ];do if tmsh -a show sys mcp-state field-fmt 2>/dev/null|grep -q running;then break;fi;let checks=checks+1;sleep 10;done;};function setup_init(){ echo "initializing setup";mount_config_drive;check_mcpd_up;};function is_onenic(){ check_mcpd_up;tmsh list net interface 1.0>/dev/null 2>&1;return $?;};function setup_passwords(){ echo "changing well known account passwords";if [[ -n $admin_password ]];then /usr/bin/passwd admin $admin_password>/dev/null 2>&1;fi;if [[ -n $root_password ]];then /usr/bin/passwd root $root_password>/dev/null 2>&1;fi;};function mount_config_drive(){ configDriveSrc=$(blkid -t LABEL="config-2" -odevice);if [[ ! -z $configDriveSrc ]];then mounted=$(cat /proc/mounts|grep $configDriveSrc|wc -l);if [[ $mounted == 0 ]];then configDriveDest="/mnt/config";mkdir -p $configDriveDest;mount "$configDriveSrc" $configDriveDest>/dev/null 2>&1;fi;fi;};function setup_static_management_interface(){ echo "configuring management interface statically";if [ -f /config/static_management_setup.py ];then /usr/bin/python /config/static_management_setup.py;tmsh save sys config>/dev/null;fi;if [ -f /config/static_management_setup.sh ];then /bin/bash /config/static_management_setup.sh;tmsh save sys config>/dev/null;fi;};function setup_host(){ echo "setting up host configurations";if [ -f /config/host_setup.py ];then /usr/bin/python /config/host_setup.py;tmsh save sys config>/dev/null;fi;if [ -f /config/host_setup.sh ];then /bin/bash /config/host_setup.sh;tmsh save sys config>/dev/null;fi;};function setup_networking(){ echo "setting up network configurations";if [ -f /config/network_setup.py ];then /usr/bin/python /config/network_setup.py;tmsh save sys config>/dev/null;fi;if [ -f /config/network_setup.sh ];then /bin/bash /config/network_setup.sh;tmsh save sys config>/dev/null;fi;};function setup_services(){ echo "setting up service configurations";if [ -f /config/services_setup.py ];then /usr/bin/python /config/services_setup.py;tmsh save sys config>/dev/null;fi;if [ -f /config/services_setup.sh ];then /bin/bash /config/services_setup.sh;tmsh save sys config>/dev/null;fi;};function setup_configsync(){ echo "setting device config sync";if [ -f /config/configsync_setup.py ];then /usr/bin/python /config/configsync_setup.py;tmsh save sys config>/dev/null;fi;if [ -f /config/configsync_setup.sh ];then /bin/bash /config/configsync_setup.sh;tmsh save sys config>/dev/null;fi;};function setup_license(){ if [[ -n $license_basekey ]];then echo "licensing BIG-IP using license key $license_basekey...";/usr/local/bin/SOAPLicenseClient --basekey $license_basekey 2>&1;sleep 10;fi;};function install_rpm(){ if [[ -n $1 ]];then for i in 1 2 3 4 5 6 7 8 9 10;do echo "installation attempt $i for $1";rpm -i $1&&break||sleep 5;done;fi;};function setup_cleanup(){ echo "cleaning up setup";umount /mnt/config>/dev/null 2>&1;mtu=`cat /sys/class/net/mgmt/mtu`;ip link set eth0 mtu 1500;ip link set mgmt mtu 1500;check_mcpd_up;tmsh save sys config>/dev/null;check_mcpd_up;ip link set mgmt mtu $mtu;}
-  - path: /config/static_management_setup.py
-    permissions: 0755
-    content: |
-      #!/bin/env python
-      import json, subprocess
-      nmd = json.load(open('/mnt/config/openstack/latest/network_data.json'))
-      for n in nmd['networks']:
-       if n['link'] == nmd['links'][0]['id']:
-        if (not n['type'] == 'ipv4_dhcp') and (not n['type'] == 'ipv6_dhcp'):
-         mgmtaddr = "%s/%s" % (n['ip_address'], n['netmask'])
-         subprocess.call(['/sbin/ip', 'addr', 'add', mgmtaddr, 'dev', 'mgmt'])
-         subprocess.call(['/sbin/ip', 'link', 'set', 'mgmt', 'up'])
-  - path: /config/host_setup.py
-    permissions: 0755
-    content: |
-      #!/bin/env python
-      import json,subprocess
-      md=json.load(open('/mnt/config/openstack/latest/meta_data.json'))
-      for k in md['public_keys']:
-       with open('/root/.ssh/authorized_keys','a')as ak:
-        ak.write(md['public_keys'][k]+'\n')
-      with open('/config/host_setup.sh','w')as hs:
-       subprocess.call(['tmsh','modify','sys','global-settings','hostname',md['hostname']])
-       subprocess.call(['tmsh','delete','cm','trust-domain','all'])
-       subprocess.call(['tmsh','mv','cm','device','bigip1',md['hostname']])
-       subprocess.call(['tmsh','modify','sys','global-settings','gui-setup','disabled'])
-  - path: /config/network_setup.py
-    permissions: 0755
-    content: |
       #!/bin/env/python
       import os,json,socket,subprocess
       nmd=json.load(open('/mnt/config/openstack/latest/network_data.json'))
@@ -82,7 +13,7 @@ write_files:
         socket.inet_pton(socket.AF_INET, n)
         return True
        except socket.error:
-        return False
+        return False      
       onenic=False
       fnull=open(os.devnull,'w')
       is_1nic=subprocess.call(['/usr/bin/tmsh','list','net','interface','1.0'],stdout=fnull)
@@ -97,7 +28,6 @@ write_files:
        n_types=['ipv4','ipv6']
        d_gw=m_dhcp=False
        m_l_id=m_ip=m_nm=m_gw=None
-       m_l_mtu=1500
        links,selfips,routes={},{},{}
        n_idx=0
        for l in nmd['links']:
@@ -105,12 +35,11 @@ write_files:
          l['mtu']=1500
         if n_idx==0:
          m_l_id=l['id']
-         m_l_mtu=l['mtu']
          n_idx+=1
          continue
         if l['type']in ln_types:
          links[l['id']]={'net_name':'net_1_%s'%n_idx,'mtu':l['mtu'],'interface':'1.%s'%n_idx,'interface_index':n_idx,'segmentation_id':4094-n_idx,'tagged':False,'route_domain':0}
-         n_idx+=1
+        n_idx+=1
        for l in nmd['links']:
         if l['type']=='vlan':
          if l['vlan_link']not in links:
@@ -177,11 +106,11 @@ write_files:
           ns.write("tmsh create sys management-ip %s\n"%m_ip)
          if m_gw:
           ns.write("tmsh create sys management-route default gateway %s\n"%m_gw)
-         ns.write("ip link set mgmt mtu %s\n"%m_l_mtu)
-         ns.write("echo 'ip link set mgmt mtu %s' > /config/startup\n"%m_l_mtu)
+         ns.write("ip link set mgmt mtu %s\n"%links[m_l_id]['mtu'])
+         ns.write("echo 'ip link set mgmt mtu %s' > /config/startup\n"%links[m_l_id]['mtu'])
        if onenic:
         with open('/config/configsync_setup.sh','w')as cs:
-         cs.write("tmsh show net self self_1nic > /dev/null 2>&1; while [ $? -ne 0 ]; do sleep 2; tmsh show net self self_1nic > /dev/null 2>&1; done\n")
+         cs.write("tmsh show net self self_1nic > /dev/null 2>&1; while [ \$? -ne 0 ]; do sleep 2; tmsh show net self self_1nic > /dev/null 2>&1; done\n")
          cs.write("tmsh modify /sys db configsync.allowmanagement value enable\n")
          cs.write("tmsh modify cm device %s configsync-ip %s unicast-address { { effective-ip %s effective-port 1026 ip %s } }\n"%(md['hostname'],m_ip,m_ip,m_ip))
        for l_id in links:
@@ -205,12 +134,10 @@ write_files:
          sip=ap[0]
          snm=ap[1]
         ns.write("tmsh create net self %s address %s%%%s/%s vlan %s allow-service all\n"%(s['selfip_name'],sip,s['route_domain'],snm,s['net_name']))
-       if(not onenic):
-        for l in links:
-         if(links[l]['interface']=='1.1'):
-          with open('/config/configsync_setup.sh','w')as cs:
-           cs.write("tmsh show net self %s > /dev/null 2>&1; while [ $? -ne 0 ]; do sleep 2; tmsh show net self %s > /dev/null 2>&1; done\n"%(s['selfip_name'],s['selfip_name']))
-           cs.write("tmsh modify cm device %s configsync-ip %s unicast-address { { effective-ip %s effective-port 1026 ip %s } } mirror-ip %s\n"%(md['hostname'],sip,sip,sip,sip))
+        if(not onenic)and(links[n_id]['interface']=='1.1'):
+         with open('/config/configsync_setup.sh','w')as cs:
+          cs.write("tmsh show net self %s > /dev/null 2>&1; while [ \$? -ne 0 ]; do sleep 2; tmsh show net self %s > /dev/null 2>&1; done\n"%(s['selfip_name'],s['selfip_name']))
+          cs.write("tmsh modify cm device %s configsync-ip %s unicast-address { { effective-ip %s effective-port 1026 ip %s } } mirror-ip %s\n"%(md['hostname'],sip,sip,sip,sip))
        for n_id in routes:
         for r in routes[n_id]:
          if r['network']=='0.0.0.0' or r['network']=='::':
@@ -232,10 +159,9 @@ write_files:
         if service['type']=='ntp' and (is_v6(service['address']) or is_v4(service['address'])):
          ns.append(service['address'])
        with open('/config/services_setup.sh','w')as ss:
-        if ds:
-         ss.write("tmsh modify sys dns name-servers replace-all-with { %s }\n"%" ".join(ds))
-        if not ts:
-         ts.append("10.0.77.54")
-        ss.write("tmsh modify sys ntp servers replace-all-with { %s }\n"%" ".join(ts))
-
-runcmd: [nohup sh -c '/config/onboard.sh' >> /var/log/onboard.log &]
+         if ds:
+          ss.write("tmsh modify sys dns name-servers replace-all-with { %s }\n"%" ".join(ds))
+         if not ts:
+          ts.append("10.0.77.54")
+         ss.write("tmsh modify sys ntp servers replace-all-with { %s }\n"%" ".join(ts))
+      

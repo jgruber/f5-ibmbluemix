@@ -3,7 +3,7 @@ bootcmd:
   - /usr/bin/setdb dhclient.mgmt disable
   - /usr/bin/setdb provision.extramb 500
   - /usr/bing/setdb provision.1nicautoconfig disable
-  - /usr/bin/setdb provision.1nic forced_disabled
+  - /usr/bin/setdb provision.1nic forced_enable
 
 write_files:
   - path: /config/onboard.sh
