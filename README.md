@@ -81,9 +81,15 @@ To obtain the user_data file for your TMOS Virtual Edition instance, download th
 
 ### Customized Settings in the User Data File
 
-The only customized setting in the user_data file are the values used for the built in `admin` and `root` passwords of your instance. All other provisioning artifacts, network settings, and SSH keys, are derived from the IBM Cloud settings.
+The IBM VIrtual Host instance can be deployed with Public Only or Public and Private Networking topologies.
 
-Editing the downloaded `ibm_init_userdata.txt` file with your preferred text editor, change the `__TMOS_ADMIN_PASSWORD__` and `__TMOS_ROOT_PASSWORD__` fields in the file to your desired values for this specific TMOS Virtual Edition instances. Here is an example using the standard Unix `sed` editor.
+![](./virtual/topology.png)
+
+When deploying as a IBM Virtual Host, the customization user data should be customized setting the values used for the built in `admin` and `root` passwords, optionally a license basekey, and optionally the URL to the AS3 service extension package to be install for of your instance. All other provisioning artifacts, network settings, and SSH keys, are derived from the IBM Cloud settings for your instance.
+
+Editing the downloaded `ibm_init_userdata.txt` file with your preferred text editor, change the `__TMOS_ADMIN_PASSWORD__`, `__TMOS_ROOT_PASSWORD__`, `__TMOS_LICENSE_BASEKEY`, and `__TMOS_AS3_URL__` fields in the file to your desired values for this specific TMOS Virtual Edition instances. 
+
+Here is an example using the standard Unix `sed` editor.
 
 ```
 sed -i -e "s/__TMOS_ADMIN_PASSWORD__/ibmsoftlayer/g" ibm_init_userdata.txt
@@ -105,6 +111,8 @@ sed -i -e "s/__TMOS_AS3_URL__//g" ibm_init_userdata.txt
 It is of note that the TMM Self-IPs are provisioned to `allow-all` services initially. The security of these interfaces can be tightened when additional services and settings are provisioned in later stage orchestration. F5 supports later stage orchestration through the use of our [f5-ansible](https://github.com/F5Networks/f5-ansible) modules and [TMOS REST APIs](https://devcentral.f5.com/wiki/iControlREST.HomePage.ashx).
 
 In addition, because there are multiple license activation options, TMOS license orchestration has also been deferred to later stage orchestration. F5 provides various license orchestration methods through both our [f5-cloud-libs](https://github.com/F5Networks/f5-cloud-libs) libraries and our [BIG-IQ APIs](https://devcentral.f5.com/wiki/BIGIQ.HowToSamples_license_member_management.ashx).
+
+For your virtual services, pools, nodes, iRules business logic, web application firewall policy, and other advanced L4-L7 features, the [AS3 declarative service extension](http://clouddocs.f5.com/products/extensions/f5-appsvcs-extension/3/) can be used to greatly accelerate and simply the ADC policy orchestration as part of your application CI/CD process. When the `__TMOS_AS3_URL__` userdata is set to the location of the AS3 installable RPM, it will automatically be installed.
 
 ## Creating a TMOS Virtual Edition Virtual Machine
 
@@ -199,6 +207,8 @@ export PORTABLE_PRIVATE_GATEWAY=10.182.41.65
 
 export TMOS_LICENSE_BASEKEY=GRUB1-KPKXB-PY867-5309O-CMUWAQY
 
+export TMOS_AS3_URL=https://github.com/F5Networks/f5-appsvcs-extension/releases/download/3.0.0/f5-appsvcs-3.0.0-34.noarch.rpm
+
 ```
 
 You will need to export these environment variables before executing the script. If these variables are not set, their default values are as follows:
@@ -217,6 +227,7 @@ PORTABLE_PRIVATE_ADDRESS| |No networking will be provisioned
 PORTABLE_PRIVATE_NETMASK| |No networking will be provisioned
 PORTABLE_PRIVATE_GATEWAY| |No networking will be provisioned
 TMOS_LICENSE_BASEKEY| |No license activation will be attempted
+TMOS_AS3_URL|https://github.com/F5Networks/f5-appsvcs-extension/releases/download/3.0.0/f5-appsvcs-3.0.0-34.noarch.rpm|URL to download the AS3 service extension installable RPM.
 
 ## Running the TMOS Virtual Edition Installation Script
 
@@ -243,6 +254,8 @@ Direct console access to the TMOS Virtual Edition can be obtained by access the 
 ``virsh console $(hostname)``
 
 Even with BIG-IP Self IP secured, console level access is maintained from the Bare Metal host.
+
+For your virtual services, pools, nodes, iRules business logic, web application firewall policy, and other advanced L4-L7 features, the [AS3 declarative service extension](http://clouddocs.f5.com/products/extensions/f5-appsvcs-extension/3/) can be used to greatly accelerate and simply the ADC policy orchestration as part of your application CI/CD process. When the `__TMOS_AS3_URL__` userdata is set to the location of the AS3 installable RPM, it will automatically be installed.
 
 If at any point in this process you experience difficulty, simply reload the OS for the Bare Metal device and start over.
 
