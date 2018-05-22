@@ -3,7 +3,11 @@ cloud-init based onboarding of TMOS Virtual Edition for IBM Cloud instances.
 
 These instuctions are for the base onboarding of TMOS Virtual Edition in the IBM Cloud environemnt. Once TMOS devices are created in the cloud environment, both [f5-cloud-libs](https://github.com/F5Networks/f5-cloud-libs) and [f5-ansible](https://github.com/F5Networks/f5-ansible) libraries can be used to perform additional provisioning automation.
 
-TMOS Virtual Editions can be launched with Virtual Hosts for performance under 1Gbps, and as instances running on Bare Metal hosts for performance in excess of 1Gbps. The processes for onboarding TMOS Virtual Edition into IBM Cloud are detailed below.
+TMOS virtual services, pools, nodes, iRules business logic, web application firewall policy, and other advanced L4-L7 features, can be managed using the [AS3 declarative service extension](http://clouddocs.f5.com/products/extensions/f5-appsvcs-extension/3/) which can greatly accelerate and simply the ADC policy orchestration as part of your application CI/CD process.
+
+TMOS Virtual Editions can be launched with Virtual Hosts for performance under 1Gbps, and as instances running on Bare Metal hosts for performance in excess of 1Gbps.
+
+The processes for onboarding TMOS Virtual Edition into IBM Cloud are detailed below.
 
 # Launching TMOS Virtual Edition as a IBM Cloud Virtual Host
 
