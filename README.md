@@ -86,8 +86,20 @@ The only customized setting in the user_data file are the values used for the bu
 Editing the downloaded `ibm_init_userdata.txt` file with your preferred text editor, change the `__TMOS_ADMIN_PASSWORD__` and `__TMOS_ROOT_PASSWORD__` fields in the file to your desired values for this specific TMOS Virtual Edition instances. Here is an example using the standard Unix `sed` editor.
 
 ```
-sed -i -e "s/__TMOS_ADMIN_PASSWORD__/softlayer/g" ibm_init_userdata.txt
-sed -i -e "s/__TMOS_ROOT_PASSWORD__/softlayer/g" ibm_init_userdata.txt
+sed -i -e "s/__TMOS_ADMIN_PASSWORD__/ibmsoftlayer/g" ibm_init_userdata.txt
+sed -i -e "s/__TMOS_ROOT_PASSWORD__/ibmsoftlayer/g" ibm_init_userdata.txt
+sed -i -e "s/__TMOS_LICENSE_BASEKEY__/GRUB1-KPKXB-PY867-5309O-CMUWAQY/g" ibm_init_userdata.txt
+sed -i -e "s#__TMOS_AS3_URL__#https://github.com/F5Networks/f5-appsvcs-extension/releases/download/3.0.0/f5-appsvcs-3.0.0-34.noarch.rpm#g" ibm_init_userdata.txt
+```
+If the IBM Cloud Virtual Host is deployed with private only networking, then public network basekey licensing will not work. You should set the license basekey to an empty string.
+
+```
+sed -i -e "s/__TMOS_LICENSE_BASEKEY__//g" ibm_init_userdata.txt
+```
+If the IBM Cloud Virtual Host is deployed with private only networking, then the AS3 iControlLX service extensions URL can either be set to a private network reachable URL or else a blank string to disable the installation.
+
+```
+sed -i -e "s/__TMOS_AS3_URL__//g" ibm_init_userdata.txt
 ```
 
 It is of note that the TMM Self-IPs are provisioned to `allow-all` services initially. The security of these interfaces can be tightened when additional services and settings are provisioned in later stage orchestration. F5 supports later stage orchestration through the use of our [f5-ansible](https://github.com/F5Networks/f5-ansible) modules and [TMOS REST APIs](https://devcentral.f5.com/wiki/iControlREST.HomePage.ashx).
