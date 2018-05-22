@@ -77,7 +77,7 @@ function get_config_drive_template() {
     sed -i -e "s/__TMOS_ADMIN_PASSWORD__/$TMOS_ADMIN_PASSWORD/g" /tmp/config_drive/openstack/latest/user_data
     sed -i -e "s/__TMOS_ROOT_PASSWORD__/$TMOS_ROOT_PASSWORD/g" /tmp/config_drive/openstack/latest/user_data
     sed -i -e "s/__TMOS_LICENSE_BASEKEY__/$TMOS_LICENSE_BASEKEY/g" /tmp/config_drive/openstack/latest/user_data
-    sed -i -e "s/__TMOS_AS3_URL__/$TMOS_AS3_URL/g" /tmp/config_drive/openstack/latest/user_data
+    sed -i -e "s#__TMOS_AS3_URL__#$TMOS_AS3_URL#g" /tmp/config_drive/openstack/latest/user_data
 }
 
 function get_ve_domain_template() {
