@@ -466,7 +466,7 @@ function cleanup_and_exit() {
     exit 1
 }
 
-function main() {
+function deploy() {
     echo "######### Installing Hypervisor Host #########"
     install_hypervisor
     echo "######### Create System ID #########"
@@ -490,6 +490,37 @@ function main() {
     create_config_drive
     echo "######### Rebooting into Hypervisor #########"
     reboot
+}
+
+function destroy() {
+    echo "######### Stopping and Removing VE Instance #########"
+    remove_vm
+    echo "######### Restoring Distribution Networking #########"
+    restore_dist_networking
+    echo "######### Removing Temporary Deployment File #########"
+    remove_temp_files
+    reboot
+}
+
+function main() {
+    if [ "$1" == "deploy" ]
+    then
+       echo ""
+       echo "######### Deploying VE Instance #########"
+       echo ""
+       deploy
+    elif [ "$1" ==  "destroy"  ]
+    then
+       echo ""
+       echo "######### Destroying VE Deployment #########"
+       echo ""
+       destroy
+    else
+       echo ""
+       echo "######### Deploying VE Instance (Default) #########"
+       echo ""
+       deploy
+    fi
 }
 
 main "$@"
