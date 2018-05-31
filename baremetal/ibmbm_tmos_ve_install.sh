@@ -172,6 +172,15 @@ EOF
     chmod +x $downscript
 }
 
+function remove_macvtap_scripts() {
+    if [ -f /etc/sysconfig/network-scripts/ifup-macvlan ]; then
+        rm -rf /etc/sysconfig/network-scripts/ifup-macvlan
+    fi
+    if [ -f /etc/sysconfig/network-scripts/ifdown-macvlan ]; then
+        rm -rf /etc/sysconfig/network-scripts/ifdown-macvlan
+    fi
+}
+
 function create_meta_data_json() {
     hostname=$(hostname);
     echo -n "{ ";
@@ -351,13 +360,19 @@ EOF
 
 function migrate_private_interface() {
     private_interface=$(get_private_interface)
-    /usr/bin/cp -f /etc/sysconfig/network-scripts/ifcfg-$private_interface /etc/sysconfig/network-scripts/dist-ifcfg-$private_interface
-    /usr/bin/cp -f /etc/sysconfig/network-scripts/route-$private_interface /etc/sysconfig/network-scripts/dist-route-$private_interface
+    if [ -f "/etc/sysconfig/network-scripts/route-$private_interface" ]; then
+        /usr/bin/cp -f /etc/sysconfig/network-scripts/ifcfg-$private_interface /etc/sysconfig/network-scripts/dist-ifcfg-$private_interface
+    fi
+    if [ -f "/etc/sysconfig/network-scripts/route-$private_interface" ]; then
+        /usr/bin/cp -f /etc/sysconfig/network-scripts/route-$private_interface /etc/sysconfig/network-scripts/dist-route-$private_interface
+    fi
     if [ -z $PORTABLE_PRIVATE_ADDRESS ]; then
         sed -i '/IPADDR/d' /etc/sysconfig/network-scripts/ifcfg-$private_interface
         sed -i '/NETMASK/d' /etc/sysconfig/network-scripts/ifcfg-$private_interface
         sed -i '/GATEWAY/d' /etc/sysconfig/network-scripts/ifcfg-$private_interface
-        rm -f /etc/sysconfig/network-scripts/route-$private_interface
+        if [ -f "/etc/sysconfig/network-scripts/route-$private_interface" ]; then
+            rm -f /etc/sysconfig/network-scripts/route-$private_interface
+        fi
     fi
     for f in /etc/sysconfig/network-scripts/ifcfg-$private_interface-range*; do
         mv -f $f /etc/sysconfig/network-scripts/dist-$f
@@ -368,13 +383,19 @@ function migrate_public_interface() {
     private_interface=$(get_private_interface)
     public_interface=$(get_public_interface)
     if [ $private_interface != $public_interface ]; then
-        /usr/bin/cp -f /etc/sysconfig/network-scripts/ifcfg-$public_interface /etc/sysconfig/network-scripts/dist-ifcfg-$public_interface
-        /usr/bin/cp -f /etc/sysconfig/network-scripts/route-$public_interface /etc/sysconfig/network-scripts/dist-route-$public_interface
+        if [ -f "/etc/sysconfig/network-scripts/ifcfg-$public_interface" ]; then
+            /usr/bin/cp -f /etc/sysconfig/network-scripts/ifcfg-$public_interface /etc/sysconfig/network-scripts/dist-ifcfg-$public_interface
+        fi
+        if [ -f "/etc/sysconfig/network-scripts/route-$public_interface" ]; then
+            /usr/bin/cp -f /etc/sysconfig/network-scripts/route-$public_interface /etc/sysconfig/network-scripts/dist-route-$public_interface
+        fi
         if [ -z $PORTABLE_PUBLIC_ADDRESS ]; then
             sed -i '/IPADDR/d' /etc/sysconfig/network-scripts/ifcfg-$public_interface
             sed -i '/NETMASK/d' /etc/sysconfig/network-scripts/ifcfg-$public_interface
             sed -i '/GATEWAY/d' /etc/sysconfig/network-scripts/ifcfg-$public_interface
-            rm -f /etc/sysconfig/network-scripts/route-$public_interface
+            if [ -f "/etc/sysconfig/network-scripts/route-$public_interface" ]; then
+                rm -f /etc/sysconfig/network-scripts/route-$public_interface
+            fi
         fi
         for f in /etc/sysconfig/network-scripts/ifcfg-$public_interface-range*; do
             mv -f $f /etc/sysconfig/network-scripts/dist-$f
@@ -402,8 +423,6 @@ function remove_temp_files() {
 }
 
 function create_config_drive() {
-    sed -i -e "s/__ADMIN_PASSWORD__/softlayerve/g" /tmp/config_drive/openstack/latest/user_data
-    sed -i -e "s/__ROOT_PASSWORD__/softlayerve/g" /tmp/config_drive/openstack/latest/user_data
     genisoimage -o /var/lib/libvirt/images/config.iso -V config-2 -J /tmp/config_drive
 }
 
@@ -489,17 +508,15 @@ function deploy() {
     echo "######### Building VE Config Drive #########"
     create_config_drive
     echo "######### Rebooting into Hypervisor #########"
-    reboot
 }
 
 function destroy() {
-    echo "######### Stopping and Removing VE Instance #########"
+    echo "######### Stopping and Removing VE Instance  #########"
     remove_vm
-    echo "######### Restoring Distribution Networking #########"
+    echo "######### Restoring Distribution Networking  #########"
     restore_dist_networking
     echo "######### Removing Temporary Deployment File #########"
     remove_temp_files
-    reboot
 }
 
 function main() {
@@ -509,17 +526,37 @@ function main() {
        echo "######### Deploying VE Instance #########"
        echo ""
        deploy
+       if [ "$2" == "noreboot" ]
+       then
+           systemctl restart network.service
+           virsh start $(hostname)
+       else
+           reboot
+       fi
     elif [ "$1" ==  "destroy"  ]
     then
        echo ""
        echo "######### Destroying VE Deployment #########"
        echo ""
        destroy
+       if [ "$2" == "noreboot" ]
+       then
+           systemctl restart network.service
+       else
+           reboot
+       fi
     else
        echo ""
        echo "######### Deploying VE Instance (Default) #########"
        echo ""
        deploy
+       if [ "$2" == "noreboot" ]
+       then
+           systemctl restart network.service
+           virsh start $(hostname)
+       else
+           reboot
+       fi
     fi
 }
 
