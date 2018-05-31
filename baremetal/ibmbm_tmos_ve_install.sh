@@ -531,7 +531,8 @@ function main() {
            systemctl restart network.service
            virsh start $(hostname)
        else
-           reboot
+           nohup reboot &> /tmp/nohup.out </dev/null &
+           exit
        fi
     elif [ "$1" ==  "destroy"  ]
     then
@@ -543,7 +544,8 @@ function main() {
        then
            systemctl restart network.service
        else
-           reboot
+           nohup reboot &> /tmp/nohup.out </dev/null &
+           exit
        fi
     else
        echo ""
@@ -555,7 +557,8 @@ function main() {
            systemctl restart network.service
            virsh start $(hostname)
        else
-           reboot
+           nohup reboot &> /tmp/nohup.out </dev/null &
+           exit
        fi
     fi
 }
