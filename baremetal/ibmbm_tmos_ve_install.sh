@@ -486,9 +486,9 @@ function cleanup_and_exit() {
 }
 
 function deploy() {
-    echo "######### Installing Hypervisor Host #########"
+    echo "######### Assuring Hypervisor Host Setup #########"
     install_hypervisor
-    echo "######### Create System ID #########"
+    echo "######### Create f5 VE System ID #########"
     create_system_id
     echo "######### Getting f5 VE Config Drive Template #########"
     get_config_drive_template
@@ -496,26 +496,25 @@ function deploy() {
     get_ve_domain_template
     echo "######### Getting f5 VE disk image #########"
     get_ve_image
-    echo "######### Adding Host Configurations #########"
+    echo "######### Adding f5 VE Host Configurations #########"
     create_macvtap_scripts
     configure_bridge_forwarding
     echo "######### Setting up Private Network #########"
     migrate_private_interface
     echo "######### Setting up Public Network #########"
     migrate_public_interface
-    echo "######### Building libvirt VE Domain #########"
+    echo "######### Building libvirt f5 VE Domain #########"
     setup_ve_host_domain
     echo "######### Building VE Config Drive #########"
     create_config_drive
-    echo "######### Rebooting into Hypervisor #########"
 }
 
 function destroy() {
-    echo "######### Stopping and Removing VE Instance  #########"
+    echo "######### Stopping and Removing f5 VE Instance  #########"
     remove_vm
     echo "######### Restoring Distribution Networking  #########"
     restore_dist_networking
-    echo "######### Removing Temporary Deployment File #########"
+    echo "######### Removing Temporary Deployment Files #########"
     remove_temp_files
 }
 
@@ -523,40 +522,48 @@ function main() {
     if [ "$1" == "deploy" ]
     then
        echo ""
-       echo "######### Deploying VE Instance #########"
+       echo "######### Deploying f5 VE Instance #########"
        echo ""
        deploy
        if [ "$2" == "noreboot" ]
        then
+           echo "######### Restarting Host Networking #########"
            systemctl restart network.service
+           echo "######### Starting f5 VE Virtual Domain #########"
            virsh start $(hostname)
        else
+           echo "######### Rebooting into Hypervisor #########"
            nohup reboot &> /tmp/nohup.out </dev/null &
            exit
        fi
     elif [ "$1" ==  "destroy"  ]
     then
        echo ""
-       echo "######### Destroying VE Deployment #########"
+       echo "######### Destroying f5 VE Deployment #########"
        echo ""
        destroy
        if [ "$2" == "noreboot" ]
        then
+           echo "######### Restarting Host Networking #########"
            systemctl restart network.service
        else
+           echo "######### Rebooting into Hypervisor #########"
            nohup reboot &> /tmp/nohup.out </dev/null &
            exit
        fi
     else
        echo ""
-       echo "######### Deploying VE Instance (Default) #########"
+       echo "######### Deploying f5 VE Instance (Default) #########"
        echo ""
        deploy
        if [ "$2" == "noreboot" ]
        then
+           echo "######### Restarting Host Networking #########"
            systemctl restart network.service
+           echo "######### Starting f5 VE Virtual Domain #########"
            virsh start $(hostname)
        else
+           echo "######### Rebooting into Hypervisor #########"
            nohup reboot &> /tmp/nohup.out </dev/null &
            exit
        fi
