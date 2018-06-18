@@ -414,12 +414,21 @@ function remove_vm() {
     hostname=$(hostname)
     virsh destroy $hostname
     virsh undefine $hostname
+    if [ -f /var/lib/libvirt/images/bigipve.qcow2 ]; then
+        rm -rf /var/lib/libvirt/images/bigipve.qcow2
+    fi
 }
 
 function remove_temp_files() {
-    rm -rf /tmp/config_drive
-    rm -rf /tmp/ve_domain_xml.tmpl
-    rm -rf /var/lib/libvirt/images/config.iso
+    if [ -f /tmp/config_drive ]; then
+        rm -rf /tmp/config_drive
+    fi
+    if [ -f /tmp/ve_domain_xml.tmpl ]; then
+        rm -rf /tmp/ve_domain_xml.tmpl
+    fi
+    if [ -f /var/lib/libvirt/images/config.iso ]; then
+        rm -rf /var/lib/libvirt/images/config.iso
+    fi
 }
 
 function create_config_drive() {
